@@ -1,0 +1,24 @@
+name,month,day,year,rule
+New Year's Day,1,1,,
+Martin Luther King Jr. Day,1,,,3rd mon
+Valentine's Day,2,14,,
+Presidents' Day,2,,,3rd mon
+Easter,,,,easter
+Mother's Day,5,,,2nd sun
+Memorial Day,5,,,last mon
+Father's Day,6,,,3rd sun
+Juneteenth,6,19,,
+America,7,4,1776,
+Labor Day,9,,,1st mon
+Columbus Day,10,,,2nd mon
+Halloween,10,31,,
+Veterans Day,11,11,,
+Thanksgiving,11,,,4th thu
+Christmas,12,25,,
+New Year's Eve,12,31,,
+Alvaro,11,24,
+Lauren,9,29,
+Bryan,12,5,
+Carolyn,7,7,
+Amanda,5,11,
+Madison,10,11,

@@ -6,17 +6,19 @@ Produces a 648x480 image restricted to black & white by default
 (use --color for the panel's 4 colors: black, white, red, yellow), so the preview on your Mac looks like
 what the real display will show.
 
-Celebrations (the dog jumps, wears a party hat and there is confetti):
-  - birthdays from data/birthdays.csv
-  - July 4th: America's birthday (patriotic dog with an Uncle Sam hat and a flag)
+Celebrations (the dog jumps, wears a costume and there is confetti):
+  - birthdays from data/dates.csv
   - monthlyversary on the 3rd of every month (see ANNIVERSARY below)
   - anniversary on April 3: a big "Happy Anniversary!" card takes over the display
+  - special days from data/dates.csv (US bank holidays and more, see HOLIDAYS below).
+    Each has its own dog costume, banner and Spanish word of the day.
 
 Usage:
     python render.py                        # live weather for CITY (see top of file), Fahrenheit
     python render.py --weather rain         # fake weather: sunny | cloudy | rain | cold | snow
-    python render.py --all --open           # every version as one overview image
-    python render.py --date 2026-04-03      # pretend it is another day (test celebrations)
+    python render.py --all --open           # weather versions + personal celebrations in one image
+    python render.py --holidays --open      # every special day, on its date this year
+    python render.py --date 2026-11-26      # pretend it is another day (test celebrations)
     python render.py --color                # use all 4 panel colors instead of black & white
 """
 import argparse
@@ -26,6 +28,7 @@ import json
 import math
 import random
 import re
+import unicodedata
 import subprocess
 import urllib.request
 from pathlib import Path
@@ -48,7 +51,7 @@ LAT, LON = 41.8781, -87.6298
 
 # The day you two started. Monthlyversaries fall on this day of every month;
 # the anniversary is on this month + day every year.
-ANNIVERSARY = dt.date(2024, 4, 3)
+ANNIVERSARY = dt.date(2025, 4, 3)
 
 DATA_DIR = Path(__file__).parent / "data"
 
@@ -68,30 +71,177 @@ def pick_word(today):
     return words[order[pos]]
 
 
-def is_july_4th(today):
-    return today.month == 7 and today.day == 4
+# Special days. The DATES live in data/dates.csv (a row whose name matches one of the
+# prefixes in HOLIDAY_PREFIXES). This table says how each day looks:
+#   theme  - which costume/props the dog gets (see draw_dachshund)
+#   calm   - True for solemn days: the dog stays in its normal pose, no confetti
+#   banner - the text in the banner
+#   word   - the day's Spanish word (replaces the normal word of the day)
+HOLIDAYS = {
+    "newyear_day": dict(theme="newyearday", calm=False, banner="Happy New Year!",
+        word=dict(word="Año Nuevo", type="noun", meaning='New Year. "¡Feliz Año Nuevo!" = Happy New Year!')),
+    "mlk": dict(theme="heart", calm=True, banner="Martin Luther King Jr. Day",
+        word=dict(word="sueño", type="noun", meaning='Dream; also "sleep". "Tengo un sueño" = "I have a dream"')),
+    "valentines": dict(theme="love", calm=False, banner="Happy Valentine's Day!",
+        word=dict(word="San Valentín", type="noun", meaning='Valentine\'s Day; also called "el Día de los Enamorados"')),
+    "presidents": dict(theme="patriotic", calm=False, banner="Happy Presidents' Day!",
+        word=dict(word="presidente", type="noun", meaning="President; also the head of a club, company or board")),
+    "easter": dict(theme="easter", calm=False, banner="Happy Easter!",
+        word=dict(word="Semana Santa", type="noun", meaning="Holy Week, the week before Easter. In Spain it means huge processions")),
+    "mothers": dict(theme="love", calm=False, banner="Happy Mother's Day!",
+        word=dict(word="madre", type="noun", meaning="Mother; mamá is the affectionate version. In Spain, Mother's Day is the first Sunday of May")),
+    "memorial": dict(theme="flag_small", calm=True, banner="Memorial Day: we remember",
+        word=dict(word="recuerdo", type="noun", meaning='A memory or a keepsake. "Recordar" = to remember')),
+    "fathers": dict(theme="love", calm=False, banner="Happy Father's Day!",
+        word=dict(word="padre", type="noun", meaning="Father; papá is the affectionate version. In Spain, Father's Day is March 19")),
+    "juneteenth": dict(theme="party", calm=False, banner="Happy Juneteenth!",
+        word=dict(word="libertad", type="noun", meaning="Freedom; liberty")),
+    "july4": dict(theme="patriotic", calm=False, banner="Happy birthday, America!",
+        word=dict(word="fuegos artificiales", type="noun", meaning='Fireworks; literally "artificial fires"')),
+    "labor": dict(theme="labor", calm=False, banner="Happy Labor Day!",
+        word=dict(word="trabajo", type="noun", meaning='Work; also a job or an assignment. In Spain, "Día del Trabajo" is May 1')),
+    "columbus": dict(theme="plain", calm=True, banner="Columbus Day / Indigenous Peoples' Day",
+        word=dict(word="festivo", type="noun", meaning='A public holiday, a day off for everyone. "Día festivo" works too')),
+    "halloween": dict(theme="halloween", calm=False, banner="Happy Halloween!",
+        word=dict(word="calabaza", type="noun", meaning='Pumpkin. "Dar calabazas" means to turn someone down')),
+    "veterans": dict(theme="flag_small", calm=True, banner="Veterans Day: thank you for your service",
+        word=dict(word="agradecer", type="verb", meaning='To thank, or be grateful for. "Te lo agradezco" = I appreciate it')),
+    "thanksgiving": dict(theme="thanksgiving", calm=False, banner="Happy Thanksgiving!",
+        word=dict(word="Acción de Gracias", type="noun", meaning='Thanksgiving; literally "action of thanks"')),
+    "christmas": dict(theme="christmas", calm=False, banner="Merry Christmas!",
+        word=dict(word="Feliz Navidad", type="phrase", meaning="Merry Christmas! On its own, Navidad is the whole Christmas season")),
+    "newyear": dict(theme="newyear", calm=False, banner="Happy New Year's Eve!",
+        word=dict(word="Nochevieja", type="noun", meaning='New Year\'s Eve; literally "old night". In Spain you eat 12 grapes at midnight')),
+}
+
+# A dates.csv row is a special day if its name is one of these (ignoring case, accents,
+# spaces and punctuation). Exact matches only, so a person called "Pascual" or "Valentine"
+# is never mistaken for Easter or Valentine's Day.
+HOLIDAY_NAMES = {
+    "newyear": ["New Year's Eve", "Nochevieja"],
+    "newyear_day": ["New Year's Day", "New Year Day", "Año Nuevo"],
+    "mlk": ["Martin Luther King Jr. Day", "Martin Luther King Day", "MLK Day", "MLK"],
+    "valentines": ["Valentine's Day", "San Valentín"],
+    "presidents": ["Presidents' Day", "President's Day", "Presidents Day"],
+    "easter": ["Easter", "Easter Sunday", "Pascua", "Domingo de Pascua"],
+    "mothers": ["Mother's Day", "Mothers Day"],
+    "memorial": ["Memorial Day"],
+    "fathers": ["Father's Day", "Fathers Day"],
+    "juneteenth": ["Juneteenth"],
+    "july4": ["America", "America's birthday", "USA", "US", "United States", "Independence Day", "4th of July", "July 4th"],
+    "labor": ["Labor Day", "Labour Day"],
+    "columbus": ["Columbus Day", "Indigenous Peoples' Day", "Indigenous Peoples Day"],
+    "halloween": ["Halloween"],
+    "veterans": ["Veterans Day"],
+    "thanksgiving": ["Thanksgiving", "Thanksgiving Day"],
+    "christmas": ["Christmas", "Christmas Day", "Navidad"],
+}
 
 
-def is_america(name):
-    """July 4th is built in, so skip a birthdays.csv row that is just 'America' (avoids a double banner)."""
-    n = re.sub(r"[^a-z]", "", name.lower())
-    return n.startswith("america") or n in ("usa", "us", "unitedstates", "theusa")
+def _norm(name):
+    plain = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9]", "", plain.lower())
+
+
+_HOLIDAY_LOOKUP = {_norm(n): key for key, names in HOLIDAY_NAMES.items() for n in names}
+
+
+def holiday_key(name):
+    """Which special day a dates.csv row is (or None for a normal birthday)."""
+    return _HOLIDAY_LOOKUP.get(_norm(name))
+
+
+WEEKDAYS = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
+
+
+def easter_date(year):
+    """Western (Gregorian) Easter Sunday."""
+    a, b, c = year % 19, year // 100, year % 100
+    d, e = b // 4, b % 4
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i, k = c // 4, c % 4
+    l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l) // 451
+    month = (h + l - 7 * m + 114) // 31
+    day = (h + l - 7 * m + 114) % 31 + 1
+    return dt.date(year, month, day)
+
+
+def row_date(row, year):
+    """The date a dates.csv row falls on in `year`.
+    A fixed date (month + day), or a rule such as "4th thu", "last mon" or "easter"."""
+    rule = (row.get("rule") or "").strip().lower()
+    if rule == "easter":
+        return easter_date(year)
+    month = int(row["month"])
+    if not rule:
+        day = int(row["day"])
+        try:
+            return dt.date(year, month, day)
+        except ValueError:  # Feb 29 in a non-leap year
+            return dt.date(year, month, 28)
+    nth, weekday = rule.split()
+    wanted = WEEKDAYS[weekday[:3]]
+    days = [dt.date(year, month, d) for d in range(1, 29 + 3)
+            if _valid(year, month, d) and dt.date(year, month, d).weekday() == wanted]
+    return days[-1] if nth == "last" else days[int(nth[0]) - 1]
+
+
+def _valid(year, month, day):
+    try:
+        dt.date(year, month, day)
+        return True
+    except ValueError:
+        return False
+
+
+def load_dates():
+    path = DATA_DIR / "dates.csv"
+    if not path.exists():
+        return []
+    with open(path, newline="", encoding="utf-8") as f:
+        return list(csv.DictReader(f))
+
+
+def _rows_for(today):
+    return [r for r in load_dates() if row_date(r, today.year) == today]
 
 
 def todays_birthdays(today):
     """List of (name, age_or_None) for people whose birthday is today."""
-    path = DATA_DIR / "birthdays.csv"
-    if not path.exists():
-        return []
     out = []
-    with open(path, newline="", encoding="utf-8") as f:
-        for row in csv.DictReader(f):
-            if is_america(row["name"]):
-                continue
-            if int(row["month"]) == today.month and int(row["day"]) == today.day:
-                year = (row.get("year") or "").strip()
-                out.append((row["name"].strip(), today.year - int(year) if year else None))
+    for row in _rows_for(today):
+        if holiday_key(row["name"]):
+            continue
+        year = (row.get("year") or "").strip()
+        out.append((row["name"].strip(), today.year - int(year) if year else None))
     return out
+
+
+def todays_holiday(today):
+    """(key, year_or_None) if today is one of the special days in dates.csv, else None."""
+    for row in _rows_for(today):
+        key = holiday_key(row["name"])
+        if key:
+            year = (row.get("year") or "").strip()
+            return key, int(year) if year else None
+    return None
+
+
+def holiday_banner(holiday, today):
+    key, year = holiday
+    text = HOLIDAYS[key]["banner"]
+    if key == "july4" and year:
+        text += f" ({today.year - year})"
+    return text
+
+
+def word_for(today, holiday):
+    """Special days get their own themed word; every other day uses the rotation."""
+    return HOLIDAYS[holiday[0]]["word"] if holiday else pick_word(today)
+
 
 def relationship_celebration(today):
     """Returns (monthly, years).
@@ -277,7 +427,8 @@ def draw_flag(d, x, y, w, h):
         for k in range(4):
             c = 6 + k * (cw - 12) / 3
             px, py = x + c, y + wave(int(c)) + 6 + r * (ch - 12) / 2
-            d.ellipse([px - 2, py - 2, px + 2, py + 2], fill=BLACK)
+            dot = 2 if w >= 60 else 1
+            d.ellipse([px - dot, py - dot, px + dot, py + dot], fill=BLACK)
 
 
 def draw_sam_hat(d, hx, hoy):
@@ -291,7 +442,131 @@ def draw_sam_hat(d, hx, hoy):
     d.rounded_rectangle([hx - 28, base - 2, hx + 26, base + 6], radius=3, fill=BLACK)
 
 
-def draw_dachshund(d, ox, oy, kind, celebrate=False, patriotic=False):
+def draw_santa_hat(d, hx, hoy):
+    base = hoy + 92
+    d.polygon([(hx - 20, base), (hx + 22, base), (hx + 32, hoy + 60), (hx + 6, hoy + 44)],
+              fill=RED, outline=BLACK)
+    d.line([(hx - 20, base), (hx + 6, hoy + 44), (hx + 32, hoy + 60), (hx + 22, base)], fill=BLACK, width=3)
+    d.ellipse([hx + 24, hoy + 54, hx + 42, hoy + 72], fill=WHITE, outline=BLACK, width=3)  # pompom
+    d.rounded_rectangle([hx - 26, base - 7, hx + 28, base + 7], radius=7,
+                        fill=WHITE, outline=BLACK, width=3)                                # fur brim
+
+
+def draw_gift(d, x, y, w=38, h=30):
+    """A wrapped present; (x, y) = top-left."""
+    d.rectangle([x, y, x + w, y + h], fill=WHITE, outline=BLACK, width=3)
+    d.rectangle([x + w // 2 - 4, y, x + w // 2 + 4, y + h], fill=BLACK)   # ribbon
+    d.rectangle([x, y + h // 2 - 4, x + w, y + h // 2 + 4], fill=BLACK)
+    d.ellipse([x + w // 2 - 13, y - 10, x + w // 2 - 1, y + 2], outline=BLACK, width=3)  # bow
+    d.ellipse([x + w // 2 + 1, y - 10, x + w // 2 + 13, y + 2], outline=BLACK, width=3)
+
+
+def draw_clock(d, cx, cy, r, minute=58):
+    """A clock: 11:58 (two minutes to midnight) by default, or minute=0 for exactly midnight."""
+    d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=WHITE, outline=BLACK, width=4)
+    for i in range(12):
+        a = i * math.pi / 6
+        inner = r - (10 if i % 3 == 0 else 7)
+        d.line([(cx + inner * math.sin(a), cy - inner * math.cos(a)),
+                (cx + (r - 4) * math.sin(a), cy - (r - 4) * math.cos(a))], fill=BLACK, width=2)
+    a = math.radians(minute * 6)  # minute hand
+    d.line([(cx, cy), (cx + (r - 9) * math.sin(a), cy - (r - 9) * math.cos(a))], fill=BLACK, width=3)
+    d.line([(cx, cy), (cx, cy - (r - 15))], fill=BLACK, width=4)            # hour hand: 12
+    d.ellipse([cx - 3, cy - 3, cx + 3, cy + 3], fill=BLACK)
+
+
+def draw_snowflake(d, cx, cy, r):
+    for i in range(3):
+        a = i * math.pi / 3
+        d.line([(cx - r * math.cos(a), cy - r * math.sin(a)), (cx + r * math.cos(a), cy + r * math.sin(a))],
+               fill=BLACK, width=2)
+
+
+def draw_witch_hat(d, hx, hoy):
+    base = hoy + 90
+    d.polygon([(hx - 18, base), (hx + 18, base), (hx + 8, hoy + 56), (hx + 26, hoy + 44)],
+              fill=RED, outline=BLACK)
+    d.line([(hx - 18, base), (hx + 8, hoy + 56), (hx + 26, hoy + 44), (hx + 18, base)], fill=BLACK, width=3)
+    d.rectangle([hx - 15, base - 14, hx + 15, base - 5], fill=WHITE, outline=BLACK, width=2)  # band
+    d.ellipse([hx - 32, base - 7, hx + 32, base + 7], fill=BLACK)                             # brim
+
+
+def draw_pilgrim_hat(d, hx, hoy):
+    base = hoy + 90
+    d.polygon([(hx - 20, base), (hx + 20, base), (hx + 15, hoy + 50), (hx - 15, hoy + 50)],
+              fill=RED, outline=BLACK)
+    d.rectangle([hx - 20, base - 15, hx + 20, base - 3], fill=WHITE, outline=BLACK, width=2)  # band
+    d.rectangle([hx - 5, base - 13, hx + 5, base - 5], outline=BLACK, width=2)                # buckle
+    d.rounded_rectangle([hx - 30, base - 3, hx + 30, base + 6], radius=3, fill=BLACK)         # brim
+
+
+def draw_bunny_ears(d, hx, hoy):
+    for x0, x1 in ((hx - 22, hx - 2), (hx + 2, hx + 22)):
+        d.ellipse([x0, hoy + 8, x1, hoy + 96], fill=WHITE, outline=BLACK, width=3)
+        d.ellipse([x0 + 6, hoy + 22, x1 - 6, hoy + 80], fill=RED)
+
+
+def draw_hard_hat(d, hx, hoy):
+    d.pieslice([hx - 26, hoy + 58, hx + 26, hoy + 118], 180, 360, fill=YELLOW, outline=BLACK, width=3)
+    d.rectangle([hx - 5, hoy + 62, hx + 5, hoy + 88], fill=RED)
+    d.rounded_rectangle([hx - 32, hoy + 86, hx + 32, hoy + 95], radius=4, fill=BLACK)
+
+
+def draw_pumpkin(d, x, y, face=False):
+    """(x, y) = top-left of a ~46x36 pumpkin."""
+    d.ellipse([x, y, x + 46, y + 36], fill=WHITE, outline=BLACK, width=3)
+    d.arc([x + 10, y + 1, x + 36, y + 35], 90, 270, fill=BLACK, width=2)
+    d.arc([x + 10, y + 1, x + 36, y + 35], 270, 90, fill=BLACK, width=2)
+    d.rectangle([x + 20, y - 8, x + 26, y + 3], fill=BLACK)  # stem
+    if face:
+        d.polygon([(x + 12, y + 13), (x + 19, y + 13), (x + 15, y + 8)], fill=BLACK)
+        d.polygon([(x + 27, y + 13), (x + 34, y + 13), (x + 30, y + 8)], fill=BLACK)
+        d.line([(x + 12, y + 24), (x + 18, y + 28), (x + 23, y + 24), (x + 28, y + 28), (x + 34, y + 24)],
+               fill=BLACK, width=3)
+
+
+def draw_egg(d, cx, cy, r):
+    d.ellipse([cx - r * 0.75, cy - r, cx + r * 0.75, cy + r], fill=WHITE, outline=BLACK, width=2)
+    d.line([(cx - r * 0.65, cy + 1), (cx - r * 0.3, cy - 3), (cx, cy + 1), (cx + r * 0.3, cy - 3), (cx + r * 0.65, cy + 1)],
+           fill=RED, width=3)
+
+
+def draw_leaf(d, cx, cy, r):
+    d.polygon([(cx, cy - r), (cx + r * 0.65, cy), (cx, cy + r), (cx - r * 0.65, cy)], fill=RED, outline=BLACK)
+    d.line([(cx, cy - r * 0.6), (cx, cy + r + 3)], fill=BLACK, width=2)
+
+
+def draw_bat(d, cx, cy):
+    for sgn in (-1, 1):
+        d.polygon([(cx, cy - 2), (cx + sgn * 9, cy - 9), (cx + sgn * 16, cy - 3),
+                   (cx + sgn * 11, cy - 2), (cx + sgn * 7, cy + 3), (cx + sgn * 3, cy + 1)], fill=BLACK)
+    d.ellipse([cx - 3, cy - 4, cx + 3, cy + 5], fill=BLACK)
+
+
+def confetti_piece(d, theme, x, y):
+    """One piece of the 'square' confetti, dressed for the theme."""
+    if theme == "christmas":
+        draw_snowflake(d, x + 5, y + 5, 8)
+    elif theme in ("patriotic", "newyear", "newyearday"):
+        draw_star(d, x + 5, y + 5, 7, RED)
+    elif theme == "love":
+        draw_heart(d, x + 8, y + 3, 4, RED)
+    elif theme == "halloween":
+        draw_bat(d, x + 8, y + 6)
+    elif theme == "easter":
+        draw_egg(d, x + 5, y + 6, 8)
+    elif theme == "thanksgiving":
+        draw_leaf(d, x + 5, y + 6, 8)
+    else:
+        d.rectangle([x, y, x + 8, y + 8], fill=RED)
+
+
+HEADGEAR = {"patriotic": draw_sam_hat, "christmas": draw_santa_hat, "halloween": draw_witch_hat,
+            "thanksgiving": draw_pilgrim_hat, "easter": draw_bunny_ears, "labor": draw_hard_hat}
+NO_PARTY_HAT = ("love", "flag_small", "heart", "plain")
+
+
+def draw_dachshund(d, ox, oy, kind, celebrate=False, theme=None):
     """A long, low dachshund facing left. (ox, oy) = top-left of a ~250x230 area.
     Idle pose: head up, tail curled, one front paw lifted.
     Celebrating pose: mid-jump with a party hat, tongue out, wagging tail, confetti."""
@@ -350,18 +625,31 @@ def draw_dachshund(d, ox, oy, kind, celebrate=False, patriotic=False):
         d.ellipse([ox + 36, hoy + 102, ox + 48, hoy + 114], fill=BLACK)
 
     # accessories
-    if patriotic:
-        draw_sam_hat(d, hx, hoy)
-    elif celebrate:  # party hat
+    if theme in HEADGEAR:
+        HEADGEAR[theme](d, hx, hoy)
+    elif celebrate and theme not in NO_PARTY_HAT:  # plain party hat
         d.polygon([(hx - 16, hoy + 92), (hx + 14, hoy + 92), (hx - 1, hoy + 52)],
                   fill=RED, outline=BLACK)
         d.ellipse([hx - 7, hoy + 44, hx + 5, hoy + 56], fill=WHITE, outline=BLACK, width=2)
-    if patriotic:  # flag planted on the dog's back
+    if theme == "christmas":  # a present waiting on the ground
+        draw_gift(d, ox - 4, ground - 30)
+    if theme in ("halloween", "thanksgiving"):  # a pumpkin on the ground
+        draw_pumpkin(d, ox - 8, ground - 36, face=(theme == "halloween"))
+    if theme in ("newyear", "newyearday"):  # the clock: 11:58 on the eve, midnight on the day
+        draw_clock(d, ox + 150, oy + 40, 30, minute=58 if theme == "newyear" else 0)
+    if theme == "heart":  # a heart floating above the dog
+        draw_heart(d, ox + 150, oy + 56, 13, RED)
+    if theme == "flag_small":  # a small flag on the dog's back
+        px = ox + 112
+        d.line([(px, oy + 132), (px, oy + 66)], fill=BLACK, width=4)
+        d.ellipse([px - 4, oy + 61, px + 4, oy + 69], fill=BLACK)
+        draw_flag(d, px + 2, oy + 70, 52, 34)
+    if theme == "patriotic":  # flag planted on the dog's back
         px = ox + 112
         d.line([(px, oy + 132), (px, oy + 4)], fill=BLACK, width=5)
         d.ellipse([px - 5, oy - 4, px + 5, oy + 6], fill=BLACK)
         draw_flag(d, px + 3, oy + 10, 76, 49)
-    if kind == "rain" and not patriotic:  # umbrella tucked into the dog's back
+    if kind == "rain" and not theme:  # umbrella tucked into the dog's back
         cx = ox + 135
         d.pieslice([cx - 95, oy + 6, cx + 95, oy + 74], 180, 360, fill=RED, outline=BLACK, width=4)
         d.line([cx, oy + 40, cx, oy + 130], fill=BLACK, width=5)
@@ -373,18 +661,18 @@ def draw_dachshund(d, ox, oy, kind, celebrate=False, patriotic=False):
         for sy in (162, 172):
             d.line([ox + 91, oy + sy, ox + 107, oy + sy], fill=RED, width=4)
 
-    # confetti
+    # confetti, dressed for the theme (stars, snowflakes, hearts, bats, eggs, leaves...)
     if celebrate:
         for dx, dy, shape in [(-8, 34, "sq"), (8, 2, "ci"), (78, -10, "sq"), (112, 22, "ci"),
                               (160, -4, "ci"), (198, 14, "sq"), (236, 40, "ci"), (250, 10, "sq"),
                               (-12, 92, "ci"), (238, 150, "sq")]:
-            if patriotic and 100 <= dx <= 200 and -20 <= dy <= 42:
+            if theme == "patriotic" and 100 <= dx <= 200 and -20 <= dy <= 42:
                 continue  # keep the flag clear
+            if theme in ("newyear", "newyearday") and 112 <= dx <= 192 and -30 <= dy <= 52:
+                continue  # keep the clock clear
             x, y = ox + dx, orig_oy + dy
-            if shape == "sq" and patriotic:
-                draw_star(d, x + 5, y + 5, 7, RED)
-            elif shape == "sq":
-                d.rectangle([x, y, x + 8, y + 8], fill=RED)
+            if shape == "sq":
+                confetti_piece(d, theme, x, y)
             else:
                 d.ellipse([x, y, x + 10, y + 10], outline=BLACK, width=3)
 
@@ -426,11 +714,13 @@ def draw_word(d, word):
         y += 24
 
 
-def render(weather, word, today, birthdays=(), monthly=None, years=None):
+def render(weather, word, today, birthdays=(), monthly=None, years=None, holiday=None):
     img = Image.new("RGB", (W, H), WHITE)
     d = ImageDraw.Draw(img)
-    july4 = is_july_4th(today)
-    celebrate = bool(birthdays or monthly or years or july4)
+    day_info = HOLIDAYS[holiday[0]] if holiday else None
+    theme = day_info["theme"] if day_info else None
+    # solemn days (Memorial Day, Veterans Day...) keep the dog calm: no jumping, no confetti
+    celebrate = bool(birthdays or monthly or years or (day_info and not day_info["calm"]))
 
     # header bar
     d.rectangle([0, 0, W, 70], fill=BLACK)
@@ -449,7 +739,7 @@ def render(weather, word, today, birthdays=(), monthly=None, years=None):
         d.text((24, 328), f"Rain chance: {weather['rain']}%", font=font(20), fill=BLACK)
 
     # dachshund (right)
-    draw_dachshund(d, 366, 112, weather["kind"], celebrate=celebrate, patriotic=july4)
+    draw_dachshund(d, 366, 112, weather["kind"], celebrate=celebrate, theme=theme)
 
     # celebration banner (birthday and/or monthlyversary)
     msgs = []
@@ -458,8 +748,8 @@ def render(weather, word, today, birthdays=(), monthly=None, years=None):
     if birthdays:
         names = ", ".join(f"{n} ({a})" if a else n for n, a in birthdays)
         msgs.append(f"Happy birthday {names}!")
-    if july4:
-        msgs.append(f"Happy birthday, America! ({today.year - 1776})")
+    if holiday:
+        msgs.append(holiday_banner(holiday, today))
     if msgs:
         text = "  \u2022  ".join(msgs)
         bf = fit_font(d, text, 380, 20)
@@ -478,8 +768,17 @@ def to_panel_colors(img):
     return img.quantize(palette=pal_img, dither=Image.Dither.NONE).convert("RGB")
 
 
+def contact_sheet(images, out_path, cols=4):
+    rows = -(-len(images) // cols)
+    sheet = Image.new("RGB", (W * cols + 10 * (cols + 1), H * rows + 10 * (rows + 1)), (150, 150, 150))
+    for i, img in enumerate(images):
+        sheet.paste(img, (10 + (i % cols) * (W + 10), 10 + (i // cols) * (H + 10)))
+    sheet.save(out_path)
+    print(f"Saved {out_path}")
+
+
 def render_all(args):
-    """Render every weather type plus the celebration versions, and a contact sheet."""
+    """Render every weather type plus the personal celebrations, and a contact sheet."""
     today = dt.date.fromisoformat(args.date) if args.date else dt.date.today()
     out_dir = Path(args.out).parent
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -489,25 +788,43 @@ def render_all(args):
         ("birthday", "sunny", [("Alex", 36)], None, None),
         ("monthlyversary", "cloudy", [], 7, None),
         ("anniversary", "sunny", [], None, 2),
-        ("july4", "sunny", [], None, None),
     ]
     images = []
     for i, (name, kind, bdays, monthly, years) in enumerate(cases):
-        w = mock_weather(kind)
         word = pick_word(today + dt.timedelta(days=i))  # a different word per sample
-        day = dt.date(today.year, 7, 4) if name == "july4" else today
-        img = to_panel_colors(render(w, word, day, bdays, monthly, years))
+        img = to_panel_colors(render(mock_weather(kind), word, today, bdays, monthly, years))
         img.save(out_dir / f"{name}.png")
         images.append(img)
         print(f"Saved {out_dir / (name + '.png')}")
-    cols, rows = 3, 3
-    sheet = Image.new("RGB", (W * cols + 10 * (cols + 1), H * rows + 10 * (rows + 1)), (150, 150, 150))
-    for i, img in enumerate(images):
-        sheet.paste(img, (10 + (i % cols) * (W + 10), 10 + (i // cols) * (H + 10)))
-    sheet.save(out_dir / "all.png")
-    print(f"Saved {out_dir / 'all.png'}")
+    contact_sheet(images, out_dir / "all.png")
     if args.open:
         subprocess.run(["open", str(out_dir / "all.png")])
+
+
+def render_holidays(args):
+    """Render every special day in dates.csv, on the date it falls on this year."""
+    today = dt.date.fromisoformat(args.date) if args.date else dt.date.today()
+    out_dir = Path(args.out).parent
+    out_dir.mkdir(parents=True, exist_ok=True)
+    kinds = ("sunny", "cloudy", "rain", "cold", "snow")
+    found = []
+    for row in load_dates():
+        key = holiday_key(row["name"])
+        if key:
+            year = (row.get("year") or "").strip()
+            found.append((row_date(row, today.year), key, int(year) if year else None, row["name"]))
+    found.sort()
+    images = []
+    for i, (day, key, year, name) in enumerate(found):
+        holiday = (key, year)
+        img = to_panel_colors(render(mock_weather(kinds[i % len(kinds)]), word_for(day, holiday), day,
+                                     holiday=holiday))
+        img.save(out_dir / f"holiday_{key}.png")
+        images.append(img)
+        print(f"{day}  {name}")
+    contact_sheet(images, out_dir / "holidays.png")
+    if args.open:
+        subprocess.run(["open", str(out_dir / "holidays.png")])
 
 
 def main():
@@ -517,9 +834,11 @@ def main():
     ap.add_argument("--open", action="store_true", help="open result in Preview (macOS)")
     ap.add_argument("--all", action="store_true",
                     help="render every version + a contact sheet (out/all.png)")
+    ap.add_argument("--holidays", action="store_true",
+                    help="render every special day from dates.csv + a contact sheet (out/holidays.png)")
     ap.add_argument("--color", action="store_true",
                     help="use all 4 panel colors (default is black & white only)")
-    ap.add_argument("--date", help="pretend today is YYYY-MM-DD (to test birthdays)")
+    ap.add_argument("--date", help="pretend today is YYYY-MM-DD (to test celebrations)")
     ap.add_argument("--out", default="out/preview.png")
     args = ap.parse_args()
 
@@ -529,6 +848,9 @@ def main():
 
     if args.all:
         render_all(args)
+        return
+    if args.holidays:
+        render_holidays(args)
         return
 
     if args.weather:
@@ -541,10 +863,11 @@ def main():
             weather = mock_weather("sunny")
 
     today = dt.date.fromisoformat(args.date) if args.date else dt.date.today()
-    word = pick_word(today)
+    holiday = todays_holiday(today)
+    word = word_for(today, holiday)
     birthdays = todays_birthdays(today)
     monthly, years = relationship_celebration(today)
-    img = to_panel_colors(render(weather, word, today, birthdays, monthly, years))
+    img = to_panel_colors(render(weather, word, today, birthdays, monthly, years, holiday))
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
