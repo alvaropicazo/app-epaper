@@ -1,0 +1,26 @@
+# Python libraries / virtual environments
+# (requirements.txt stays tracked, so anyone can reinstall with: pip install -r requirements.txt)
+.venv/
+venv/
+env/
+ENV/
+site-packages/
+*.egg-info/
+.eggs/
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Build artifacts
+build/
+dist/
+
+# Generated previews (re-create any time with: python render.py --all)
+out/
+
+# macOS
+.DS_Store
