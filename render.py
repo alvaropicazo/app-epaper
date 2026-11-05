@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Morning e-paper renderer: Spanish word of the day + weather + a little dachshund.
+Morning e-paper renderer: weather + a little dachshund + a Spanish word of the day.
 
 Produces a 648x480 image restricted to black & white by default
 (use --color for the panel's 4 colors: black, white, red, yellow), so the preview on your Mac looks like
@@ -51,7 +51,7 @@ LAT, LON = 41.8781, -87.6298
 
 # The day you two started. Monthlyversaries fall on this day of every month;
 # the anniversary is on this month + day every year.
-ANNIVERSARY = dt.date(2025, 4, 3)
+ANNIVERSARY = dt.date(2024, 4, 3)
 
 DATA_DIR = Path(__file__).parent / "data"
 
@@ -79,39 +79,39 @@ def pick_word(today):
 #   word   - the day's Spanish word (replaces the normal word of the day)
 HOLIDAYS = {
     "newyear_day": dict(theme="newyearday", calm=False, banner="Happy New Year!",
-        word=dict(word="Año Nuevo", type="noun", meaning='New Year. "¡Feliz Año Nuevo!" = Happy New Year!')),
+        word=dict(word="Año Nuevo", type="noun", pronunciation="A-nyo NWE-bo", example="Brindamos por el Año Nuevo.", translation="We toasted to the New Year.", meaning='New Year. "¡Feliz Año Nuevo!" = Happy New Year!')),
     "mlk": dict(theme="heart", calm=True, banner="Martin Luther King Jr. Day",
-        word=dict(word="sueño", type="noun", meaning='Dream; also "sleep". "Tengo un sueño" = "I have a dream"')),
+        word=dict(word="sueño", type="noun", pronunciation="SWE-nyo", example="Anoche tuve un sueño raro.", translation="Last night I had a strange dream.", meaning='Dream; also "sleep". "Tengo un sueño" = "I have a dream"')),
     "valentines": dict(theme="love", calm=False, banner="Happy Valentine's Day!",
-        word=dict(word="San Valentín", type="noun", meaning='Valentine\'s Day; also called "el Día de los Enamorados"')),
+        word=dict(word="San Valentín", type="noun", pronunciation="san ba-len-TEEN", example="Te regalé flores por San Valentín.", translation="I gave you flowers for Valentine's Day.", meaning='Valentine\'s Day; also called "el Día de los Enamorados"')),
     "presidents": dict(theme="patriotic", calm=False, banner="Happy Presidents' Day!",
-        word=dict(word="presidente", type="noun", meaning="President; also the head of a club, company or board")),
+        word=dict(word="presidente", type="noun", pronunciation="pre-see-DEN-te", example="El presidente habló esta mañana.", translation="The president spoke this morning.", meaning="President; also the head of a club, company or board")),
     "easter": dict(theme="easter", calm=False, banner="Happy Easter!",
-        word=dict(word="Semana Santa", type="noun", meaning="Holy Week, the week before Easter. In Spain it means huge processions")),
+        word=dict(word="Semana Santa", type="noun", pronunciation="se-MA-na SAN-ta", example="En Semana Santa hay procesiones.", translation="During Holy Week there are processions.", meaning="Holy Week, the week before Easter. In Spain it means huge processions")),
     "mothers": dict(theme="love", calm=False, banner="Happy Mother's Day!",
-        word=dict(word="madre", type="noun", meaning="Mother; mamá is the affectionate version. In Spain, Mother's Day is the first Sunday of May")),
+        word=dict(word="madre", type="noun", pronunciation="MA-dre", example="Mi madre cocina muy bien.", translation="My mother cooks very well.", meaning="Mother; mamá is the affectionate version. In Spain, Mother's Day is the first Sunday of May")),
     "memorial": dict(theme="flag_small", calm=True, banner="Memorial Day: we remember",
-        word=dict(word="recuerdo", type="noun", meaning='A memory or a keepsake. "Recordar" = to remember')),
+        word=dict(word="recuerdo", type="noun", pronunciation="re-KWER-do", example="Tengo un buen recuerdo de ese viaje.", translation="I have a good memory of that trip.", meaning='A memory or a keepsake. "Recordar" = to remember')),
     "fathers": dict(theme="love", calm=False, banner="Happy Father's Day!",
-        word=dict(word="padre", type="noun", meaning="Father; papá is the affectionate version. In Spain, Father's Day is March 19")),
+        word=dict(word="padre", type="noun", pronunciation="PA-dre", example="Mi padre me enseñó a nadar.", translation="My father taught me to swim.", meaning="Father; papá is the affectionate version. In Spain, Father's Day is March 19")),
     "juneteenth": dict(theme="party", calm=False, banner="Happy Juneteenth!",
-        word=dict(word="libertad", type="noun", meaning="Freedom; liberty")),
+        word=dict(word="libertad", type="noun", pronunciation="lee-ber-TAD", example="La libertad es muy importante.", translation="Freedom is very important.", meaning="Freedom; liberty")),
     "july4": dict(theme="patriotic", calm=False, banner="Happy birthday, America!",
-        word=dict(word="fuegos artificiales", type="noun", meaning='Fireworks; literally "artificial fires"')),
+        word=dict(word="fuegos artificiales", type="noun", pronunciation="FWE-gos ar-tee-fee-THYA-les", example="Los fuegos artificiales empiezan a las diez.", translation="The fireworks start at ten.", meaning='Fireworks; literally "artificial fires"')),
     "labor": dict(theme="labor", calm=False, banner="Happy Labor Day!",
-        word=dict(word="trabajo", type="noun", meaning='Work; also a job or an assignment. In Spain, "Día del Trabajo" is May 1')),
+        word=dict(word="trabajo", type="noun", pronunciation="tra-BA-ho", example="Hoy tengo mucho trabajo.", translation="I have a lot of work today.", meaning='Work; also a job or an assignment. In Spain, "Día del Trabajo" is May 1')),
     "columbus": dict(theme="plain", calm=True, banner="Columbus Day / Indigenous Peoples' Day",
-        word=dict(word="festivo", type="noun", meaning='A public holiday, a day off for everyone. "Día festivo" works too')),
+        word=dict(word="festivo", type="noun", pronunciation="fes-TEE-bo", example="El lunes es festivo.", translation="Monday is a public holiday.", meaning='A public holiday, a day off for everyone. "Día festivo" works too')),
     "halloween": dict(theme="halloween", calm=False, banner="Happy Halloween!",
-        word=dict(word="calabaza", type="noun", meaning='Pumpkin. "Dar calabazas" means to turn someone down')),
+        word=dict(word="calabaza", type="noun", pronunciation="ka-la-BA-tha", example="Vamos a tallar una calabaza.", translation="We're going to carve a pumpkin.", meaning='Pumpkin. "Dar calabazas" means to turn someone down')),
     "veterans": dict(theme="flag_small", calm=True, banner="Veterans Day: thank you for your service",
-        word=dict(word="agradecer", type="verb", meaning='To thank, or be grateful for. "Te lo agradezco" = I appreciate it')),
+        word=dict(word="agradecer", type="verb", pronunciation="a-gra-de-THER", example="Quiero agradecerte tu ayuda.", translation="I want to thank you for your help.", meaning='To thank, or be grateful for. "Te lo agradezco" = I appreciate it')),
     "thanksgiving": dict(theme="thanksgiving", calm=False, banner="Happy Thanksgiving!",
-        word=dict(word="Acción de Gracias", type="noun", meaning='Thanksgiving; literally "action of thanks"')),
+        word=dict(word="Acción de Gracias", type="noun", pronunciation="ak-THYON de GRA-thyas", example="En Acción de Gracias comemos pavo.", translation="On Thanksgiving we eat turkey.", meaning='Thanksgiving; literally "action of thanks"')),
     "christmas": dict(theme="christmas", calm=False, banner="Merry Christmas!",
-        word=dict(word="Feliz Navidad", type="phrase", meaning="Merry Christmas! On its own, Navidad is the whole Christmas season")),
+        word=dict(word="Feliz Navidad", type="phrase", pronunciation="fe-LEETH na-bee-DAD", example="¡Feliz Navidad a todos!", translation="Merry Christmas, everyone!", meaning="Merry Christmas! On its own, Navidad is the whole Christmas season")),
     "newyear": dict(theme="newyear", calm=False, banner="Happy New Year's Eve!",
-        word=dict(word="Nochevieja", type="noun", meaning='New Year\'s Eve; literally "old night". In Spain you eat 12 grapes at midnight')),
+        word=dict(word="Nochevieja", type="noun", pronunciation="no-che-BYE-ha", example="En Nochevieja tomamos doce uvas.", translation="On New Year's Eve we eat twelve grapes.", meaning='New Year\'s Eve; literally "old night". In Spain you eat 12 grapes at midnight')),
 }
 
 # A dates.csv row is a special day if its name is one of these (ignoring case, accents,
@@ -276,44 +276,84 @@ def font(size, bold=False):
 
 # ---------------------------------------------------------------- weather
 
+SLOT_LABELS = ("Morning", "Noon", "Afternoon", "Evening")
+SLOT_HOURS = (8, 12, 16, 20)
+
+
+def kind_from_code(code, rain):
+    """Icon type for one weather code (Open-Meteo / WMO codes)."""
+    if code in (71, 73, 75, 77, 85, 86):
+        return "snow"
+    if code >= 51 or rain >= 50:
+        return "rain"
+    return "sunny" if code <= 1 else "cloudy"
+
+
 def mock_weather(kind):
-    presets = {
-        "sunny": dict(kind="sunny", label="Sunny", high=75, low=57, rain=5),
-        "rain": dict(kind="rain", label="Rain", high=59, low=50, rain=80),
-        "cold": dict(kind="cold", label="Cold", high=36, low=25, rain=10),
-        "snow": dict(kind="snow", label="Snow", high=30, low=21, rain=70),
-        "cloudy": dict(kind="cloudy", label="Cloudy", high=64, low=54, rain=20),
-    }
-    return presets[kind]
+    base = {
+        "sunny": dict(label="Sunny", high=75, low=57, rain=5),
+        "rain": dict(label="Rain", high=59, low=50, rain=80),
+        "cold": dict(label="Cold", high=36, low=25, rain=10),
+        "snow": dict(label="Snow", high=30, low=21, rain=70),
+        "cloudy": dict(label="Cloudy", high=64, low=54, rain=20),
+    }[kind]
+    icons = {"sunny": ("sunny", "sunny", "sunny", "cloudy"), "cloudy": ("cloudy", "cloudy", "sunny", "cloudy"),
+             "rain": ("cloudy", "rain", "rain", "cloudy"), "cold": ("cloudy", "cloudy", "sunny", "cloudy"),
+             "snow": ("snow", "snow", "snow", "cloudy")}[kind]
+    wet = kind in ("rain", "snow")
+    temp_f = (0.15, 0.8, 1.0, 0.4)
+    rain_f = (0.4, 1.0, 0.9, 0.4) if wet else (0.3, 0.6, 0.6, 0.3)
+    slots = [(SLOT_LABELS[i], icons[i], round(base["low"] + (base["high"] - base["low"]) * temp_f[i]),
+              round(base["rain"] * rain_f[i])) for i in range(4)]
+    return dict(kind=kind, slots=slots, feels=base["high"] - (4 if kind in ("cold", "snow") else 2),
+                wind={"sunny": 6, "cloudy": 9, "rain": 12, "cold": 14, "snow": 15}[kind],
+                sunrise="6:34 AM", sunset="4:50 PM", **base)
+
+
+def _clock(iso):
+    t = dt.datetime.fromisoformat(iso)
+    return f"{t.hour % 12 or 12}:{t.minute:02d} {'AM' if t.hour < 12 else 'PM'}"
 
 
 def live_weather(lat, lon):
     url = (
         "https://api.open-meteo.com/v1/forecast"
         f"?latitude={lat}&longitude={lon}"
-        "&daily=weather_code,temperature_2m_max,temperature_2m_min,"
-        "precipitation_probability_max&temperature_unit=fahrenheit"
-        "&timezone=auto&forecast_days=1"
+        "&hourly=temperature_2m,precipitation_probability,weather_code"
+        "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,"
+        "apparent_temperature_max,wind_speed_10m_max,sunrise,sunset"
+        "&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&forecast_days=1"
     )
     with urllib.request.urlopen(url, timeout=15) as r:
-        d = json.load(r)["daily"]
+        data = json.load(r)
+    d, h = data["daily"], data["hourly"]
     code = d["weather_code"][0]
     high, low = round(d["temperature_2m_max"][0]), round(d["temperature_2m_min"][0])
     rain = d["precipitation_probability_max"][0] or 0
-    if code in (71, 73, 75, 77, 85, 86):
-        kind, label = "snow", "Snow"
-    elif code >= 51 or rain >= 50:
-        kind, label = "rain", "Rain"
-    elif high <= 41:
+    kind = kind_from_code(code, rain)
+    label = {"snow": "Snow", "rain": "Rain", "sunny": "Sunny", "cloudy": "Cloudy"}[kind]
+    if kind not in ("snow", "rain") and high <= 41:
         kind, label = "cold", "Cold"
-    elif code <= 1:
-        kind, label = "sunny", "Sunny"
-    else:
-        kind, label = "cloudy", "Cloudy"
-    return dict(kind=kind, label=label, high=high, low=low, rain=rain)
+    slots = []
+    for name, hour in zip(SLOT_LABELS, SLOT_HOURS):
+        pr = h["precipitation_probability"][hour] or 0
+        slots.append((name, kind_from_code(h["weather_code"][hour], pr), round(h["temperature_2m"][hour]), round(pr)))
+    return dict(kind=kind, label=label, high=high, low=low, rain=rain, slots=slots,
+                feels=round(d["apparent_temperature_max"][0]), wind=round(d["wind_speed_10m_max"][0]),
+                sunrise=_clock(d["sunrise"][0]), sunset=_clock(d["sunset"][0]))
 
 
 # ---------------------------------------------------------------- drawing
+def sprite(draw_fn, height):
+    """Draw something on a scratch canvas, crop it and scale it to `height` px (kept crisp in black & white)."""
+    big = Image.new("RGB", (170, 150), WHITE)
+    draw_fn(ImageDraw.Draw(big))
+    big = big.crop(big.convert("L").point(lambda v: 255 if v < 128 else 0).getbbox())
+    small = big.resize((max(1, round(big.width * height / big.height)), height), Image.LANCZOS)
+    if PALETTE == [BLACK, WHITE]:
+        small = small.convert("L").point(lambda v: 255 if v > 150 else 0).convert("RGB")
+    return small
+
 
 def wrap(draw, text, fnt, max_width):
     lines, line = [], ""
@@ -677,41 +717,125 @@ def draw_dachshund(d, ox, oy, kind, celebrate=False, theme=None):
                 d.ellipse([x, y, x + 10, y + 10], outline=BLACK, width=3)
 
 
-def draw_anniversary(d, years, weather):
-    """The big anniversary takeover: framed message on the left, short weather line below."""
-    d.rounded_rectangle([24, 84, 338, 296], radius=18, outline=BLACK, width=6)
-    d.rounded_rectangle([34, 94, 328, 286], radius=12, outline=BLACK, width=2)
-    cx = 181
-    d.text((cx, 120), "HAPPY", font=font(28, True), fill=BLACK, anchor="mm")
-    d.text((cx, 160), "Anniversary!", font=fit_font(d, "Anniversary!", 270, 46), fill=BLACK, anchor="mm")
+CAPTIONS = {"sunny": "It's sunny!", "cloudy": "A cloudy one today", "rain": "It's raining!",
+            "cold": "Bundle up, it's cold!", "snow": "It's snowing!"}
 
+# Layout (648x480):  header | weather card (left) + dog scene (right) | [banner] | word card
+LEFT = (24, 306)             # weather card columns
+SCENE = (322, 58, W - 24, 326)
+GROUND = 300                 # the dog's ground line inside the scene
+DOG_X = 350
+
+
+def drops(d, x, y0, y1, step=34):
+    y = y0
+    while y < y1:
+        d.line([(x, y), (x - 4, y + 13)], fill=BLACK, width=3)
+        y += step
+
+
+def draw_anniversary(d, years, weather):
+    """The big anniversary takeover: a framed message replaces the weather card."""
+    d.rounded_rectangle([24, 58, 306, 292], radius=18, outline=BLACK, width=6)
+    d.rounded_rectangle([34, 68, 296, 282], radius=12, outline=BLACK, width=2)
+    cx = 165
+    d.text((cx, 94), "HAPPY", font=font(26, True), fill=BLACK, anchor="mm")
+    d.text((cx, 132), "Anniversary!", font=fit_font(d, "Anniversary!", 244, 42), fill=BLACK, anchor="mm")
     num = str(years)
     side1 = "year" if years == 1 else "years"
-    nf, sf1, sf2 = font(92, True), font(32, True), font(22, True)
+    nf, sf1, sf2 = font(88, True), font(30, True), font(20, True)
     nw = d.textlength(num, font=nf)
     sw = max(d.textlength(side1, font=sf1), d.textlength("together", font=sf2))
-    x0 = cx - (nw + 14 + sw) / 2
-    d.text((x0, 214), num, font=nf, fill=BLACK, anchor="lm")
-    d.text((x0 + nw + 14, 200), side1, font=sf1, fill=BLACK, anchor="lm")
-    d.text((x0 + nw + 14, 230), "together", font=sf2, fill=BLACK, anchor="lm")
-    for hx in (cx - 44, cx, cx + 44):
-        draw_heart(d, hx - 6, 266, 6, RED)
-
+    x0 = cx - (nw + 12 + sw) / 2
+    d.text((x0, 196), num, font=nf, fill=BLACK, anchor="lm")
+    d.text((x0 + nw + 12, 184), side1, font=sf1, fill=BLACK, anchor="lm")
+    d.text((x0 + nw + 12, 212), "together", font=sf2, fill=BLACK, anchor="lm")
+    for hx in (cx - 42, cx, cx + 42):
+        draw_heart(d, hx - 6, 258, 6, RED)
     line = f"{weather['label']}   {weather['high']}\u00b0 / {weather['low']}\u00b0   \u2022   {weather['rain']}% rain"
-    d.text((24, 316), line, font=fit_font(d, line, 310, 24), fill=BLACK, anchor="lm")
+    d.text((24, 310), line, font=fit_font(d, line, 282, 20), fill=BLACK, anchor="lm")
 
 
-def draw_word(d, word):
-    """Bottom strip: the Spanish word of the day and what it means."""
-    d.line([24, 372, W - 24, 372], fill=BLACK, width=3)
-    d.text((W - 24, 384), "PALABRA DEL D\u00cdA", font=font(14, True), fill=RED, anchor="ra")
-    d.text((W - 24, 404), word["type"], font=font(18), fill=BLACK, anchor="ra")
-    d.text((24, 378), word["word"], font=fit_font(d, word["word"], 430, 42), fill=BLACK, anchor="la")
-    mfont = font(20)
-    y = 430
-    for line in wrap(d, word["meaning"], mfont, W - 48)[:2]:
-        d.text((24, y), line, font=mfont, fill=BLACK)
-        y += 24
+def draw_weather_card(img, d, weather):
+    """Big temperature, a four-slot forecast, and the small details."""
+    x0, x1 = LEFT
+    tf = font(78, True)
+    temp = f"{weather['high']}\u00b0"
+    d.text((x0 + 4, 54), temp, font=tf, fill=BLACK, anchor="la")
+    d.text((x0 + 4 + d.textlength(temp, font=tf) + 12, 104), f"/ {weather['low']}\u00b0",
+           font=font(30), fill=BLACK, anchor="la")
+    lf = font(26, True)
+    d.text((x0 + 4, 144), weather["label"], font=lf, fill=BLACK, anchor="la")
+    detail = f"Feels {weather['feels']}\u00b0  \u00b7  Wind {weather['wind']} mph"
+    dx = x0 + 4 + d.textlength(weather["label"], font=lf) + 14
+    d.text((dx, 152), detail, font=fit_font(d, detail, x1 - dx, 14, False), fill=BLACK, anchor="la")
+    d.line([(x0, 182), (x1, 182)], fill=BLACK, width=2)
+    for i, (label, kind, temp_f, rain) in enumerate(weather["slots"]):
+        y = 188 + i * 28
+        d.text((x0 + 4, y + 13), label, font=font(16, True), fill=BLACK, anchor="lm")
+        img.paste(sprite(lambda dd, k=kind: draw_weather_icon(dd, k, 85, 72), 24), (140, y + 2))
+        d.text((202, y + 13), f"{temp_f}\u00b0", font=font(18, True), fill=BLACK, anchor="lm")
+        d.text((250, y + 13), f"{rain}%", font=font(16), fill=BLACK, anchor="lm")
+    d.line([(x0, 302), (x1, 302)], fill=BLACK, width=2)
+    d.text((x0 + 4, 309), f"Sunrise {weather['sunrise']}  \u00b7  Sunset {weather['sunset']}",
+           font=fit_font(d, f"Sunrise {weather['sunrise']}  \u00b7  Sunset {weather['sunset']}", x1 - x0 - 4, 14, False),
+           fill=BLACK, anchor="la")
+
+
+def draw_scene(img, d, weather, celebrate, theme):
+    """The dog in its box, with the weather in the sky and a caption underneath."""
+    bx0, by0, bx1, by1 = SCENE
+    kind = weather["kind"]
+    if not celebrate:  # keep the sky calm when the dog is jumping
+        if kind == "rain":
+            for x in (bx0 + 32, bx0 + 60, bx1 - 36, bx1 - 14):
+                drops(d, x, by0 + 12, GROUND - 10)
+        elif kind == "snow":
+            for fx, fy in ((344, 76), (372, 108), (402, 140), (600, 80), (584, 124), (606, 170), (348, 190)):
+                draw_snowflake(d, fx, fy, 8)
+        else:
+            img.paste(sprite(lambda dd: draw_weather_icon(dd, kind, 85, 72), 36), (bx1 - 74, by0 + 12))
+    draw_dachshund(d, DOG_X, GROUND - 206, kind, celebrate=celebrate, theme=theme)
+    d.rectangle([bx0 + 2, GROUND + 3, bx1 - 2, by1 - 2], fill=WHITE)
+    d.line([(bx0 + 2, GROUND + 2), (bx1 - 2, GROUND + 2)], fill=BLACK, width=3)
+    cap = CAPTIONS[kind]
+    d.text(((bx0 + bx1) / 2, GROUND + 14), cap, font=fit_font(d, cap, 270, 16), fill=BLACK, anchor="mm")
+    d.rounded_rectangle([bx0, by0, bx1, by1], radius=14, outline=BLACK, width=4)
+
+
+def draw_word_card(d, word, y0):
+    """The one Spanish part of the screen: the word, how to say it, what it means, an example."""
+    y1 = 476
+    d.rounded_rectangle([24, y0, W - 24, y1], radius=12, outline=BLACK, width=3)
+    roomy = (y1 - y0) >= 120
+    pron = (word.get("pronunciation") or "").strip()
+    example = (word.get("example") or "").strip()
+    translation = (word.get("translation") or "").strip()
+    inner = W - 76
+    for scale in (1.0, 0.92, 0.84, 0.76):
+        s_word, s_mean, s_ex, s_tr = (round(v * scale) for v in ((48, 21, 20, 17) if roomy else (34, 16, 15, 13)))
+        wf = fit_font(d, word["word"], 330, s_word)
+        mf, ef, tf = font(s_mean), font(s_ex, True), font(s_tr)
+        mlines = wrap(d, word["meaning"], mf, inner)[:2]
+        total = wf.size * 1.2 + len(mlines) * s_mean * 1.25 + (s_ex * 1.25 if example else 0) + (s_tr * 1.3 if translation else 0)
+        if total <= (y1 - y0) - 14:
+            break
+    y = y0 + 6
+    d.text((38, y), word["word"], font=wf, fill=BLACK, anchor="la")
+    d.text((W - 38, y + 3), "PALABRA DEL D\u00cdA", font=font(12, True), fill=BLACK, anchor="ra")
+    tag = f"{word['type']}  \u00b7  /{pron}/" if pron else word["type"]
+    d.text((W - 38, y + 19), tag, font=fit_font(d, tag, 250, 14, False), fill=BLACK, anchor="ra")
+    y += wf.size * 1.2
+    for line in mlines:
+        d.text((38, y), line, font=mf, fill=BLACK, anchor="la")
+        y += s_mean * 1.25
+    if example:
+        d.text((38, y), example, font=fit_font(d, example, inner, s_ex), fill=BLACK, anchor="la")
+        y += s_ex * 1.25
+    if translation:
+        d.text((38, y), translation, font=fit_font(d, translation, inner, s_tr, False), fill=BLACK, anchor="la")
+        y += s_tr * 1.3
+    return y  # how far down the text reaches (used by the tests)
 
 
 def render(weather, word, today, birthdays=(), monthly=None, years=None, holiday=None):
@@ -723,25 +847,19 @@ def render(weather, word, today, birthdays=(), monthly=None, years=None, holiday
     celebrate = bool(birthdays or monthly or years or (day_info and not day_info["calm"]))
 
     # header bar
-    d.rectangle([0, 0, W, 70], fill=BLACK)
-    d.text((24, 12), today.strftime("%A"), font=font(34, True), fill=WHITE)
-    d.text((W // 2 - 6, 35), CITY, font=font(22), fill=WHITE, anchor="mm")
-    d.text((W - 24, 22), today.strftime("%d %B %Y"), font=font(24), fill=YELLOW, anchor="ra")
+    d.rectangle([0, 0, W, 50], fill=BLACK)
+    d.text((24, 25), today.strftime("%A"), font=font(28, True), fill=WHITE, anchor="lm")
+    d.text((W // 2 + 40, 25), CITY, font=font(20), fill=WHITE, anchor="mm")
+    d.text((W - 24, 25), f"{today.strftime('%b')} {today.day}, {today.year}", font=font(22), fill=WHITE, anchor="rm")
 
+    # left: weather card (or the anniversary card), right: the dog
     if years:
         draw_anniversary(d, years, weather)
     else:
-        # weather panel (left)
-        draw_weather_icon(d, weather["kind"], 100, 150)
-        d.text((24, 210), f"{weather['high']}\u00b0", font=font(64, True), fill=BLACK)
-        d.text((140, 245), f"/ {weather['low']}\u00b0", font=font(30), fill=BLACK)
-        d.text((24, 295), weather["label"], font=font(26, True), fill=RED)
-        d.text((24, 328), f"Rain chance: {weather['rain']}%", font=font(20), fill=BLACK)
+        draw_weather_card(img, d, weather)
+    draw_scene(img, d, weather, celebrate, theme)
 
-    # dachshund (right)
-    draw_dachshund(d, 366, 112, weather["kind"], celebrate=celebrate, theme=theme)
-
-    # celebration banner (birthday and/or monthlyversary)
+    # celebration banner: only takes space when there is something to celebrate
     msgs = []
     if monthly:
         msgs.append(f"Happy monthlyversary! Month {monthly}")
@@ -750,13 +868,14 @@ def render(weather, word, today, birthdays=(), monthly=None, years=None, holiday
         msgs.append(f"Happy birthday {names}!")
     if holiday:
         msgs.append(holiday_banner(holiday, today))
+    card_y = 340
     if msgs:
         text = "  \u2022  ".join(msgs)
-        bf = fit_font(d, text, 380, 20)
-        d.rectangle([224, 340, W - 24, 368], fill=YELLOW, outline=BLACK, width=2)
-        d.text(((224 + W - 24) / 2, 354), text, font=bf, fill=RED, anchor="mm")
+        d.rounded_rectangle([24, 334, W - 24, 360], radius=8, fill=YELLOW, outline=BLACK, width=3)
+        d.text((W // 2, 347), text, font=fit_font(d, text, 580, 18), fill=RED, anchor="mm")
+        card_y = 368
 
-    draw_word(d, word)
+    draw_word_card(d, word, card_y)
     return img
 
 
