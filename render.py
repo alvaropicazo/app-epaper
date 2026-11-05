@@ -540,10 +540,22 @@ def draw_pilgrim_hat(d, hx, hoy):
     d.rounded_rectangle([hx - 30, base - 3, hx + 30, base + 6], radius=3, fill=BLACK)         # brim
 
 
+def draw_beanie(d, hx, hoy):
+    """A knitted winter beanie: striped dome, ribbed cuff and a pom-pom."""
+    d.pieslice([hx - 22, hoy + 60, hx + 22, hoy + 120], 180, 360, fill=YELLOW, outline=BLACK, width=3)
+    for y, half in ((70, 15), (80, 19)):  # knitted stripes
+        d.line([(hx - half, hoy + y), (hx + half, hoy + y)], fill=RED, width=3)
+    d.rounded_rectangle([hx - 25, hoy + 86, hx + 25, hoy + 98], radius=4, fill=BLACK)  # ribbed cuff
+    for x in range(hx - 20, hx + 22, 6):
+        d.line([(x, hoy + 88), (x, hoy + 96)], fill=WHITE, width=2)
+    d.ellipse([hx - 8, hoy + 47, hx + 8, hoy + 63], fill=WHITE, outline=BLACK, width=3)  # pom-pom
+    d.ellipse([hx - 2, hoy + 53, hx + 2, hoy + 57], fill=BLACK)
+
+
 def draw_bunny_ears(d, hx, hoy):
     for x0, x1 in ((hx - 22, hx - 2), (hx + 2, hx + 22)):
-        d.ellipse([x0, hoy + 8, x1, hoy + 96], fill=WHITE, outline=BLACK, width=3)
-        d.ellipse([x0 + 6, hoy + 22, x1 - 6, hoy + 80], fill=RED)
+        d.ellipse([x0, hoy + 22, x1, hoy + 96], fill=WHITE, outline=BLACK, width=3)
+        d.ellipse([x0 + 6, hoy + 34, x1 - 6, hoy + 82], fill=RED)
 
 
 def draw_hard_hat(d, hx, hoy):
@@ -606,11 +618,39 @@ HEADGEAR = {"patriotic": draw_sam_hat, "christmas": draw_santa_hat, "halloween":
 NO_PARTY_HAT = ("love", "flag_small", "heart", "plain")
 
 
-def draw_dachshund(d, ox, oy, kind, celebrate=False, theme=None):
-    """A long, low dachshund facing left. (ox, oy) = top-left of a ~250x230 area.
+class ScaledDraw:
+    """Wraps an ImageDraw so that everything is drawn `k` times bigger around the point (ax, ay).
+    Lets the dog (with all its costumes and props) be resized without touching any coordinates."""
+
+    def __init__(self, d, k, ax, ay):
+        self.d, self.k, self.ax, self.ay = d, k, ax, ay
+
+    def _xy(self, xy):
+        xy = list(xy)
+        if xy and isinstance(xy[0], (tuple, list)):
+            return [(self.ax + (x - self.ax) * self.k, self.ay + (y - self.ay) * self.k) for x, y in xy]
+        return [self.ax + (v - self.ax) * self.k if i % 2 == 0 else self.ay + (v - self.ay) * self.k
+                for i, v in enumerate(xy)]
+
+    def __getattr__(self, name):  # line, ellipse, rectangle, rounded_rectangle, polygon, arc, pieslice
+        fn = getattr(self.d, name)
+
+        def draw(xy, *args, **kw):
+            for key in ("width", "radius"):
+                if kw.get(key):
+                    kw[key] = max(1, round(kw[key] * self.k))
+            return fn(self._xy(xy), *args, **kw)
+        return draw
+
+
+def draw_dachshund(d, ox, oy, kind, celebrate=False, theme=None, scale=1.0):
+    """A long, low dachshund facing left. (ox, oy) = top-left of a ~250x230 area (before scaling).
     Idle pose: head up, tail curled, one front paw lifted.
-    Celebrating pose: mid-jump with a party hat, tongue out, wagging tail, confetti."""
+    Celebrating pose: mid-jump with a party hat, tongue out, wagging tail, confetti.
+    scale > 1 draws it bigger, growing from the middle of its feet."""
     ground = oy + 206
+    if scale != 1.0:
+        d = ScaledDraw(d, scale, ox + 109, ground)
     orig_oy = oy
     if celebrate:
         oy -= 24                      # jump!
@@ -619,10 +659,17 @@ def draw_dachshund(d, ox, oy, kind, celebrate=False, theme=None):
 
     # tail (curled up) and wag lines
     tip = (ox + 236, oy + 80) if celebrate else (ox + 230, oy + 92)
-    d.line([(ox + 206, oy + 142), (ox + 226, oy + 130), (ox + 236, oy + 108), tip],
-           fill=BLACK, width=9, joint="curve")
+    p0, ctrl = (ox + 206, oy + 142), (ox + 248, oy + 128)
+    prev = p0
+    for i in range(1, 13):  # a smooth curl, thick at the base and thin at the tip
+        t = i / 12
+        q = tuple((1 - t) ** 2 * a + 2 * (1 - t) * t * b + t * t * c for a, b, c in zip(p0, ctrl, tip))
+        w = round(11 - 5 * t)
+        d.line([prev, q], fill=BLACK, width=w)
+        d.ellipse([q[0] - w / 2, q[1] - w / 2, q[0] + w / 2, q[1] + w / 2], fill=BLACK)
+        prev = q
     if celebrate:
-        for (x1, y1), (x2, y2) in [((248, 96), (262, 88)), ((250, 108), (264, 108)), ((248, 120), (262, 128))]:
+        for (x1, y1), (x2, y2) in [((242, 96), (253, 89)), ((244, 108), (256, 108)), ((242, 120), (253, 127))]:
             d.line([(ox + x1, oy + y1), (ox + x2, oy + y2)], fill=BLACK, width=3)
 
     # legs (drawn before the body so it overlaps them)
@@ -631,27 +678,41 @@ def draw_dachshund(d, ox, oy, kind, celebrate=False, theme=None):
         limb(d, (ox + 98, oy + 174), (ox + 66, oy + 194))
         limb(d, (ox + 176, oy + 176), (ox + 194, oy + 202))   # back legs kicked out
         limb(d, (ox + 204, oy + 174), (ox + 224, oy + 196))
-        d.ellipse([ox + 40, ground - 5, ox + 222, ground + 7], outline=BLACK, width=2)  # shadow
+        d.ellipse([ox + 50, ground - 2, ox + 210, ground + 6], fill=BLACK)  # shadow on the ground
     else:
         for lx in (ox + 92, ox + 170, ox + 200):
             d.rounded_rectangle([lx, oy + 168, lx + 20, ground], radius=8,
                                 fill=YELLOW, outline=BLACK, width=4)
+            d.ellipse([lx - 2, ground - 8, lx + 22, ground + 2], fill=YELLOW, outline=BLACK, width=3)  # paw
         limb(d, (ox + 72, oy + 172), (ox + 46, oy + 190))     # lifted front paw
-        d.line([ox + 30, ground + 1, ox + 226, ground + 1], fill=BLACK, width=3)
 
     # body
     d.rounded_rectangle([ox + 50, oy + 128, ox + 214, oy + 186], radius=29,
                         fill=YELLOW, outline=BLACK, width=4)
+    if kind in ("cold", "snow"):  # knitted sweater: a band, a zigzag and a ribbed hem
+        sx0, sx1 = ox + 84, ox + 186
+        d.rectangle([sx0, oy + 132, sx1, oy + 182], fill=YELLOW)
+        d.rectangle([sx0, oy + 138, sx1, oy + 150], fill=RED)
+        zig = [(x, oy + 160 + (7 if ((x - sx0) // 8) % 2 else 0)) for x in range(sx0, sx1 + 1, 8)]
+        d.line(zig, fill=BLACK, width=2)
+        for x in range(sx0 + 5, sx1, 7):
+            d.line([(x, oy + 173), (x, oy + 182)], fill=BLACK, width=2)
+        d.line([(sx0, oy + 130), (sx0, oy + 184)], fill=BLACK, width=3)
+        d.line([(sx1, oy + 130), (sx1, oy + 184)], fill=BLACK, width=3)
 
     # snout, head, nose, mouth, ear
     d.rounded_rectangle([ox - 14, hoy + 106, ox + 44, hoy + 134], radius=13,
                         fill=YELLOW, outline=BLACK, width=4)
     d.ellipse([ox + 18, hoy + 88, ox + 80, hoy + 142], fill=YELLOW, outline=BLACK, width=4)
     d.ellipse([ox - 18, hoy + 106, ox, hoy + 122], fill=BLACK)
+    d.ellipse([ox - 14, hoy + 109, ox - 9, hoy + 113], fill=WHITE)  # shiny nose
+    for wx, wy in ((ox + 10, hoy + 112), (ox + 17, hoy + 114), (ox + 12, hoy + 119)):  # whisker dots
+        d.ellipse([wx - 1.5, wy - 1.5, wx + 1.5, wy + 1.5], fill=BLACK)
     if celebrate:  # tongue out
         d.ellipse([ox + 8, hoy + 124, ox + 26, hoy + 148], fill=RED, outline=BLACK, width=3)
     d.arc([ox + 6, hoy + 118, ox + 40, hoy + 136], 0, 90, fill=BLACK, width=3)
     d.ellipse([ox + 56, hoy + 98, ox + 92, hoy + 156], fill=BLACK)
+    d.arc([ox + 62, hoy + 106, ox + 86, hoy + 148], 290, 70, fill=WHITE, width=2)  # shine on the ear
 
     # eye / glasses
     if kind == "sunny":
@@ -663,8 +724,12 @@ def draw_dachshund(d, ox, oy, kind, celebrate=False, theme=None):
         d.arc([ox + 32, hoy + 104, ox + 52, hoy + 118], 0, 180, fill=BLACK, width=4)
     else:
         d.ellipse([ox + 36, hoy + 102, ox + 48, hoy + 114], fill=BLACK)
+        d.ellipse([ox + 40, hoy + 105, ox + 44, hoy + 109], fill=WHITE)  # sparkle in the eye
 
     # accessories
+    hat_on = theme in HEADGEAR or (celebrate and theme not in NO_PARTY_HAT)
+    if kind in ("cold", "snow") and not hat_on:
+        draw_beanie(d, hx, hoy)
     if theme in HEADGEAR:
         HEADGEAR[theme](d, hx, hoy)
     elif celebrate and theme not in NO_PARTY_HAT:  # plain party hat
@@ -686,26 +751,19 @@ def draw_dachshund(d, ox, oy, kind, celebrate=False, theme=None):
         draw_flag(d, px + 2, oy + 70, 52, 34)
     if theme == "patriotic":  # flag planted on the dog's back
         px = ox + 112
-        d.line([(px, oy + 132), (px, oy + 4)], fill=BLACK, width=5)
-        d.ellipse([px - 5, oy - 4, px + 5, oy + 6], fill=BLACK)
-        draw_flag(d, px + 3, oy + 10, 76, 49)
+        d.line([(px, oy + 132), (px, oy + 20)], fill=BLACK, width=5)
+        d.ellipse([px - 5, oy + 14, px + 5, oy + 24], fill=BLACK)
+        draw_flag(d, px + 3, oy + 26, 76, 49)
     if kind == "rain" and not theme:  # umbrella tucked into the dog's back
         cx = ox + 135
         d.pieslice([cx - 95, oy + 6, cx + 95, oy + 74], 180, 360, fill=RED, outline=BLACK, width=4)
         d.line([cx, oy + 40, cx, oy + 130], fill=BLACK, width=5)
-    if kind in ("cold", "snow"):  # striped scarf, just behind the ear
-        d.rectangle([ox + 86, oy + 128, ox + 112, oy + 154], fill=YELLOW, outline=BLACK, width=3)
-        d.rectangle([ox + 90, oy + 152, ox + 108, oy + 184], fill=YELLOW, outline=BLACK, width=3)
-        for sy in (136, 146):
-            d.line([ox + 87, oy + sy, ox + 111, oy + sy], fill=RED, width=4)
-        for sy in (162, 172):
-            d.line([ox + 91, oy + sy, ox + 107, oy + sy], fill=RED, width=4)
 
     # confetti, dressed for the theme (stars, snowflakes, hearts, bats, eggs, leaves...)
     if celebrate:
         for dx, dy, shape in [(-8, 34, "sq"), (8, 2, "ci"), (78, -10, "sq"), (112, 22, "ci"),
-                              (160, -4, "ci"), (198, 14, "sq"), (236, 40, "ci"), (250, 10, "sq"),
-                              (-12, 92, "ci"), (238, 150, "sq")]:
+                              (160, -4, "ci"), (198, 14, "sq"), (216, 30, "ci"), (240, 8, "sq"),
+                              (-12, 92, "ci"), (232, 150, "sq")]:
             if theme == "patriotic" and 100 <= dx <= 200 and -20 <= dy <= 42:
                 continue  # keep the flag clear
             if theme in ("newyear", "newyearday") and 112 <= dx <= 192 and -30 <= dy <= 52:
@@ -717,14 +775,12 @@ def draw_dachshund(d, ox, oy, kind, celebrate=False, theme=None):
                 d.ellipse([x, y, x + 10, y + 10], outline=BLACK, width=3)
 
 
-CAPTIONS = {"sunny": "It's sunny!", "cloudy": "A cloudy one today", "rain": "It's raining!",
-            "cold": "Bundle up, it's cold!", "snow": "It's snowing!"}
-
 # Layout (648x480):  header | weather card (left) + dog scene (right) | [banner] | word card
-LEFT = (24, 306)             # weather card columns
-SCENE = (322, 58, W - 24, 326)
-GROUND = 300                 # the dog's ground line inside the scene
-DOG_X = 350
+LEFT = (24, 290)             # weather card columns
+SCENE = (306, 58, W - 24, 326)
+GROUND = 308                 # the dog's ground line inside the scene
+DOG_X = 348
+DOG_SCALE = 1.1
 
 
 def drops(d, x, y0, y1, step=34):
@@ -736,11 +792,11 @@ def drops(d, x, y0, y1, step=34):
 
 def draw_anniversary(d, years, weather):
     """The big anniversary takeover: a framed message replaces the weather card."""
-    d.rounded_rectangle([24, 58, 306, 292], radius=18, outline=BLACK, width=6)
-    d.rounded_rectangle([34, 68, 296, 282], radius=12, outline=BLACK, width=2)
-    cx = 165
+    d.rounded_rectangle([24, 58, 290, 292], radius=18, outline=BLACK, width=6)
+    d.rounded_rectangle([34, 68, 280, 282], radius=12, outline=BLACK, width=2)
+    cx = 157
     d.text((cx, 94), "HAPPY", font=font(26, True), fill=BLACK, anchor="mm")
-    d.text((cx, 132), "Anniversary!", font=fit_font(d, "Anniversary!", 244, 42), fill=BLACK, anchor="mm")
+    d.text((cx, 132), "Anniversary!", font=fit_font(d, "Anniversary!", 228, 40), fill=BLACK, anchor="mm")
     num = str(years)
     side1 = "year" if years == 1 else "years"
     nf, sf1, sf2 = font(88, True), font(30, True), font(20, True)
@@ -753,7 +809,7 @@ def draw_anniversary(d, years, weather):
     for hx in (cx - 42, cx, cx + 42):
         draw_heart(d, hx - 6, 258, 6, RED)
     line = f"{weather['label']}   {weather['high']}\u00b0 / {weather['low']}\u00b0   \u2022   {weather['rain']}% rain"
-    d.text((24, 310), line, font=fit_font(d, line, 282, 20), fill=BLACK, anchor="lm")
+    d.text((24, 310), line, font=fit_font(d, line, 266, 20), fill=BLACK, anchor="lm")
 
 
 def draw_weather_card(img, d, weather):
@@ -783,7 +839,7 @@ def draw_weather_card(img, d, weather):
 
 
 def draw_scene(img, d, weather, celebrate, theme):
-    """The dog in its box, with the weather in the sky and a caption underneath."""
+    """The dog in its box, with the weather in the sky and a little grass at its feet."""
     bx0, by0, bx1, by1 = SCENE
     kind = weather["kind"]
     if not celebrate:  # keep the sky calm when the dog is jumping
@@ -791,15 +847,14 @@ def draw_scene(img, d, weather, celebrate, theme):
             for x in (bx0 + 32, bx0 + 60, bx1 - 36, bx1 - 14):
                 drops(d, x, by0 + 12, GROUND - 10)
         elif kind == "snow":
-            for fx, fy in ((344, 76), (372, 108), (402, 140), (600, 80), (584, 124), (606, 170), (348, 190)):
+            for fx, fy in ((330, 76), (358, 104), (392, 132), (600, 80), (584, 124), (606, 150), (340, 150)):
                 draw_snowflake(d, fx, fy, 8)
         else:
             img.paste(sprite(lambda dd: draw_weather_icon(dd, kind, 85, 72), 36), (bx1 - 74, by0 + 12))
-    draw_dachshund(d, DOG_X, GROUND - 206, kind, celebrate=celebrate, theme=theme)
-    d.rectangle([bx0 + 2, GROUND + 3, bx1 - 2, by1 - 2], fill=WHITE)
+    draw_dachshund(d, DOG_X, GROUND - 206, kind, celebrate=celebrate, theme=theme, scale=DOG_SCALE)
     d.line([(bx0 + 2, GROUND + 2), (bx1 - 2, GROUND + 2)], fill=BLACK, width=3)
-    cap = CAPTIONS[kind]
-    d.text(((bx0 + bx1) / 2, GROUND + 14), cap, font=fit_font(d, cap, 270, 16), fill=BLACK, anchor="mm")
+    for x in range(bx0 + 16, bx1 - 14, 24):  # little grass tufts
+        d.line([(x, GROUND + 15), (x + 4, GROUND + 7), (x + 8, GROUND + 15)], fill=BLACK, width=2)
     d.rounded_rectangle([bx0, by0, bx1, by1], radius=14, outline=BLACK, width=4)
 
 
