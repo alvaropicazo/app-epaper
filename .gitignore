@@ -15,12 +15,22 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
+# Private Wi-Fi credentials
+firmware/src/secrets.h
+
+# PlatformIO generated files
+firmware/.pio/
+firmware/.cache/
+
 # Build artifacts
 build/
 dist/
 
 # Generated previews (re-create any time with: python render.py --all)
 out/
+
+# PlatformIO local VS Code configuration
+firmware/.vscode/
 
 # macOS
 .DS_Store
