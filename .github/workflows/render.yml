@@ -60,7 +60,7 @@ jobs:
         if: steps.time_check.outputs.run == 'true'
         run: |
           mkdir -p output
-          python render.py --color --out output/display.png
+          python render.py --out output/display.png
 
       - name: Publish generated image
         if: steps.time_check.outputs.run == 'true'
