@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python3
 """
 Generate four panel-ready ePaper frames from one Open-Meteo forecast:
@@ -22,6 +23,7 @@ PERIOD_HOURS = {
     "evening": 18,
     "night": 22,
 }
+
 LABELS = {
     "sunny": "Sunny",
     "cloudy": "Cloudy",
@@ -52,7 +54,9 @@ def find_hour(hourly_times, date, hour):
     try:
         return hourly_times.index(wanted)
     except ValueError as exc:
-        raise RuntimeError(f"Forecast is missing the requested local hour: {wanted}") from exc
+        raise RuntimeError(
+            f"Forecast is missing the requested local hour: {wanted}"
+        ) from exc
 
 
 def make_weather(data, today, period):
@@ -66,6 +70,7 @@ def make_weather(data, today, period):
     apparent = round(hourly["apparent_temperature"][i])
     rain = hourly["precipitation_probability"][i] or 0
     kind = render.kind_from_code(hourly["weather_code"][i], rain)
+
     if kind not in ("rain", "snow") and temp <= 41:
         kind = "cold"
 
@@ -74,16 +79,20 @@ def make_weather(data, today, period):
     for label, slot_hour in zip(render.SLOT_LABELS, render.SLOT_HOURS):
         j = find_hour(hourly["time"], today, slot_hour)
         probability = hourly["precipitation_probability"][j] or 0
-        slot_kind = render.kind_from_code(hourly["weather_code"][j], probability)
+        slot_kind = render.kind_from_code(
+            hourly["weather_code"][j], probability
+        )
         slot_temp = round(hourly["temperature_2m"][j])
         slots.append((label, slot_kind, slot_temp, round(probability)))
 
     sunrise = render._clock(daily["sunrise"][day_index])
     sunset = render._clock(daily["sunset"][day_index])
+
     return {
         "kind": kind,
-        "label": f"{period.title()} · {LABELS[kind]}",
-        "high": temp,  # The large number now reflects this period's forecast.
+        # Show only the weather condition, never the time-of-day period.
+        "label": LABELS[kind],
+        "high": temp,
         "low": round(daily["temperature_2m_min"][day_index]),
         "rain": round(rain),
         "feels": apparent,
@@ -96,8 +105,11 @@ def make_weather(data, today, period):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--out-dir", default="output",
-                        help="directory for the four PNG and BIN files")
+    parser.add_argument(
+        "--out-dir",
+        default="output",
+        help="directory for the four PNG and BIN files",
+    )
     args = parser.parse_args()
 
     # Match render.py's default black-and-white panel mode.
@@ -119,12 +131,17 @@ def main():
     for period in PERIOD_HOURS:
         weather = make_weather(forecast, today, period)
         image = render.to_panel_colors(
-            render.render(weather, word, today, birthdays, monthly, years, holiday)
+            render.render(
+                weather, word, today, birthdays, monthly, years, holiday
+            )
         )
+
         png_path = out_dir / f"{period}.png"
         bin_path = out_dir / f"{period}.bin"
+
         image.save(png_path)
         save_panel_bin(image, bin_path, panel_codes)
+
         print(f"Generated {period}: {png_path} and {bin_path}")
 
 
