@@ -1,11 +1,11 @@
-
 name: Generate ePaper Display
 
 on:
   schedule:
-    # 10 AM UTC = 5 AM Central Standard Time
-    # 11 AM UTC = 5 AM Central Daylight Time
-    - cron: "0 10,11 * * *"
+    # 10:17 UTC = 5:17 AM Central Daylight Time
+    # 11:17 UTC = 5:17 AM Central Standard Time
+    # The local-time guard below makes exactly one run proceed each day.
+    - cron: "17 10,11 * * *"
 
   workflow_dispatch:
 
@@ -14,6 +14,7 @@ on:
       - main
     paths:
       - "render.py"
+      - "render_periods.py"
       - "panel_export.py"
       - "requirements.txt"
       - "data/**"
@@ -25,22 +26,22 @@ permissions:
 jobs:
   render:
     runs-on: ubuntu-latest
-
     env:
       TZ: America/Chicago
 
     steps:
       - name: Check scheduled run time
         id: time_check
+        shell: bash
         run: |
-          if [ "${{ github.event_name }}" != "schedule" ] || [ "$(date +%H)" = "05" ]; then
+          if [[ "${{ github.event_name }}" != "schedule" ]] || [[ "$(date +%H)" == "05" ]]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"
-            echo "Not 5 AM Central Time. Skipping rendering."
+            echo "Not the 5 AM Chicago run; skipping the duplicate UTC schedule."
           fi
 
-      - name: Checkout repository
+      - name: Check out repository
         if: steps.time_check.outputs.run == 'true'
         uses: actions/checkout@v4
 
@@ -57,23 +58,27 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Generate ePaper image
+      - name: Generate the legacy display and four period frames
         if: steps.time_check.outputs.run == 'true'
         run: |
           mkdir -p output
           python render.py --out output/display.png
+          python render_periods.py --out-dir output
 
-      - name: Publish generated image
+      - name: Publish generated frames
         if: steps.time_check.outputs.run == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          git add output/display.png output/display.bin
+          git add output/display.png output/display.bin \
+            output/morning.png output/morning.bin \
+            output/afternoon.png output/afternoon.bin \
+            output/evening.png output/evening.bin \
+            output/night.png output/night.bin
 
           if git diff --cached --quiet; then
-            echo "Image unchanged. No commit needed."
+            echo "Generated frames are unchanged; no commit needed."
           else
-            git commit -m "Update daily ePaper display"
+            git commit -m "Update daily ePaper period forecasts"
             git push
           fi
