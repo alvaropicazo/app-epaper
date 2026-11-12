@@ -32,6 +32,7 @@ import unicodedata
 import subprocess
 import urllib.request
 from pathlib import Path
+from panel_export import save_panel_bin
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -1047,6 +1048,10 @@ def main():
     out.parent.mkdir(parents=True, exist_ok=True)
     img.save(out)
     print(f"Saved {out} ({img.size[0]}x{img.size[1]}, weather={weather['kind']})")
+    codes = {BLACK: 0, WHITE: 1}
+    if args.color:
+       codes.update({YELLOW: 2, RED: 3})
+    save_panel_bin(img, out.with_suffix(".bin"), codes)
     if args.open:
         subprocess.run(["open", str(out)])
 

@@ -14,6 +14,7 @@ on:
       - main
     paths:
       - "render.py"
+      - "panel_export.py"
       - "requirements.txt"
       - "data/**"
       - ".github/workflows/render.yml"
@@ -68,7 +69,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add output/display.png
+          git add output/display.png output/display.bin
 
           if git diff --cached --quiet; then
             echo "Image unchanged. No commit needed."
