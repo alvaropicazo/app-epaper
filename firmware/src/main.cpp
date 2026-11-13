@@ -545,6 +545,8 @@ static void sleepUntilNextEvent(
 
 void setup() {
     Serial.begin(115200);
+    setenv("TZ", TZ_INFO, 1);
+    tzset();
     delay(500);
 
     Serial.println("\n=== ePaper four-period display ===");
@@ -632,9 +634,14 @@ void setup() {
     WiFi.disconnect(true);
     WiFi.mode(WIFI_OFF);
 
-    const int period = currentPeriod(localTime);
-
-    showPeriodIfNeeded(period, today);
+    // Do not change the screen before the first daily display transition.
+    // The morning image is displayed at 06:00.
+    if (minuteOfDay >= 6 * 60) {
+        const int period = currentPeriod(localTime);
+        showPeriodIfNeeded(period, today);
+    } else {
+        Serial.println("Before 06:00; keeping the existing screen.");
+    }
 
     sleepUntilNextEvent(localTime, cacheNeedsRetry);
 }
