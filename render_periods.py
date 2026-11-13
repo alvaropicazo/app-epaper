@@ -152,11 +152,14 @@ def main():
 
     forecast = fetch_forecast(render.LAT, render.LON)
 
+    # Force all four forecast frames to black and white only.
+    render.RED = render.BLACK
+    render.YELLOW = render.WHITE
+    render.PALETTE = [render.BLACK, render.WHITE]
+
     codes = {
         render.BLACK: 0,
         render.WHITE: 1,
-        render.YELLOW: 2,
-        render.RED: 3,
     }
 
     for period in PERIOD_HOURS:
