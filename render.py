@@ -277,8 +277,8 @@ def font(size, bold=False):
 
 # ---------------------------------------------------------------- weather
 
-SLOT_LABELS = ("Morning", "Noon", "Afternoon", "Evening")
-SLOT_HOURS = (8, 12, 16, 20)
+SLOT_LABELS = ("Morning", "Afternoon", "Evening", "Night")
+SLOT_HOURS = (9, 12, 16, 20)
 
 
 def kind_from_code(code, rain):

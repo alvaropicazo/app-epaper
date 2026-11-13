@@ -1,90 +1,321 @@
 # epaper-morning
 
-Daily Spanish word + weather + a little dachshund, rendered for a 648x480 e-paper panel.
-Black & white by default; add `--color` for the panel's 4 colors (black/white/red/yellow).
-Preview it on your Mac, no hardware needed.
+A little daily display for a 648 × 480, four-colour e-paper screen. It brings together the weather in Chicago, a Spanish word of the day, birthdays and special occasions, and a dachshund who dresses for the weather.
 
-## Setup (macOS)
-    python3 -m venv .venv && source .venv/bin/activate
-    pip install -r requirements.txt
+The display is designed to run on its own. GitHub Actions prepares the day's images, and an ESP32 downloads them and updates the screen throughout the day. No computer needs to stay on, and there's no need to press reset every morning.
 
-## Preview
-    python render.py --weather rain --open     # fake weather: sunny | cloudy | rain | cold | snow
-    python render.py                           # live Chicago weather in °F (Open-Meteo, no API key)
-    python render.py --all --open              # weather versions + personal celebrations in one image
-    python render.py --holidays --open         # every special day, on its date this year
-    python render.py --date 2026-11-26 --open  # pretend it is another day
+## How it works
 
-Output goes to `out/preview.png`. To change the city, edit `CITY`, `LAT` and `LON` at the top of `render.py`.
+There are three parts to the project:
 
-## Layout
-Everything on screen is in English except the word card, which is the one place Spanish is taught.
-- **Header:** weekday, city, date
-- **Left:** the weather card: big temperature, feels-like and wind, a four-slot forecast (morning, noon,
-  afternoon, evening) and sunrise/sunset. Real data comes from Open-Meteo; if the fetch fails it falls back to sample weather.
-- **Right:** the dog in its scene, standing on a bit of grass. The weather shows in the sky (rain, snow, sun...).
-  The dog's size is `DOG_SCALE` at the top of the layout section in `render.py`.
-- **Banner:** a one-line banner appears under them only on celebration days (birthdays, monthlyversary, special days).
-- **Bottom:** the word card with the word, pronunciation, meaning, a Spanish example and its translation.
-- **Anniversary:** on April 3 the big anniversary card replaces the weather card.
+1. **The Python renderer** builds the display using the weather forecast, the day's Spanish word, and any birthdays or celebrations.
+2. **GitHub Actions** runs every morning at around 3:17 AM Chicago time. It generates four versions of the display and publishes the panel-ready files to `output/`.
+3. **The ESP32** downloads and stores those four images, then updates the e-paper screen at the appropriate times.
 
-## Your data (lives in the repo)
-- `data/words.csv`: `word,type,meaning,pronunciation,example,translation`. One word per day in the
-  "Palabra del día" card. It goes through the whole list in a shuffled order before repeating, and the
-  word stays the same all day. Phrases work too (set type to `phrase`). `pronunciation` is a respelling
-  for a Spain accent (stressed syllable in CAPS, "th" as in "think"). Only `word`, `type` and `meaning`
-  are required; the card simply skips what's empty.
-- `data/dates.csv`: **every date lives here**: `name,month,day,year,rule`
-  - **People:** `Alex,11,1,1990,`. Year is optional (leave it empty to hide the age).
-  - **Special days** (US bank holidays and more, see below): the row's *name* decides what it is.
-  - **Floating dates:** leave `day` empty and fill `rule`: `4th thu` (Thanksgiving), `last mon`
-    (Memorial Day), `3rd mon`, `2nd sun`... or `easter`, which is calculated for you every year.
-  - Special-day names must be one of the names listed in `HOLIDAY_NAMES` in `render.py`
-    (case, accents and punctuation don't matter). Matching is exact on purpose, so a friend called
-    "Pascual" or "Valentine" is never mistaken for Easter or Valentine's Day.
+The screen updates at:
+
+| Chicago time | Image |
+|---|---|
+| 6:00 AM | Morning |
+| 11:00 AM | Afternoon |
+| 4:00 PM | Evening |
+| 9:00 PM | Night |
+
+Each image uses a forecast for a different part of the day: 9 AM, 1 PM, 6 PM and 10 PM, respectively. The time shown in the table is when the ESP32 puts that image on the screen.
+
+Between updates, the ESP32 goes into deep sleep to save power. It wakes up automatically for the next scheduled task.
+
+If Wi-Fi or a download fails, the ESP32 keeps the last complete set of cached images rather than replacing it with an incomplete set.
+
+## Preview it on your Mac
+
+You can run the renderer without the ESP32 or the e-paper panel.
+
+### Requirements
+
+- Python 3
+- The packages listed in `requirements.txt`
+
+### Set up the environment
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+### Try it out
+
+```bash
+# Use sample weather
+python render.py --weather rain --open
+
+# Use the live Chicago forecast
+python render.py
+
+# Generate weather variations and personal celebrations
+python render.py --all --open
+
+# Preview special days
+python render.py --holidays --open
+
+# Preview a particular date
+python render.py --date 2026-11-26 --open
+```
+
+The preview is written to `out/preview.png`.
+
+To change the location, edit `CITY`, `LAT` and `LON` near the top of `render.py`.
+
+## Daily image generation
+
+The four daily versions are generated by:
+
+```bash
+python render_periods.py --out-dir output
+```
+
+The script gets an hourly forecast from [Open-Meteo](https://open-meteo.com/) and creates one image for each part of the day.
+
+The generated files are saved in `output/`:
+
+```text
+output/
+├── morning.png
+├── morning.bin
+├── afternoon.png
+├── afternoon.bin
+├── evening.png
+├── evening.bin
+├── night.png
+└── night.bin
+```
+
+The PNG files are useful for checking the images. The BIN files contain the packed pixel data that the ESP32 sends to the panel.
+
+The panel format is 648 × 480 pixels, with two bits per pixel and four colours: black, white, yellow and red. Each raw frame is 77,760 bytes.
+
+You can generate the four images for a particular date while testing:
+
+```bash
+python render_periods.py --date 2026-11-26 --out-dir output
+```
+
+## Automatic daily updates
+
+The workflow lives at:
+
+```text
+.github/workflows/render.yml
+```
+
+It runs automatically at approximately 3:17 AM Chicago time. The schedule accounts for daylight saving time by using two UTC cron entries and allowing only the one that falls at 3 AM locally to proceed.
+
+You can also start it manually from the **Actions** tab on GitHub by selecting the rendering workflow and choosing **Run workflow**.
+
+When the workflow finishes, it commits the generated images to the repository. The ESP32 fetches the `.bin` files directly from the repository's `output/` directory.
+
+GitHub Actions scheduled jobs aren't guaranteed to start at the exact minute, so the ESP32's download time is set later in the morning to leave some room for the images to be generated and published.
+
+## The ESP32
+
+The firmware is in:
+
+```text
+firmware/
+```
+
+It is an Arduino/PlatformIO project for an ESP32 Dev Module connected to a Waveshare 5.83-inch, 648 × 480, four-colour e-paper panel.
+
+The firmware handles the daily routine:
+
+- Connects to Wi-Fi and gets the current Chicago time.
+- Starts checking for the new daily images at 5:45 AM.
+- Downloads all four frames and checks their sizes before activating the new set.
+- Keeps the previous cached images if the new download is incomplete.
+- Refreshes the panel at 6 AM, 11 AM, 4 PM and 9 PM.
+- Turns Wi-Fi off and goes into deep sleep between scheduled events.
+
+The time zone is set to Chicago, including daylight saving time. The ESP32 uses network time when Wi-Fi is available and retains its clock while sleeping.
+
+### Wi-Fi credentials
+
+Create this file:
+
+```text
+firmware/src/secrets.h
+```
+
+Add your Wi-Fi details:
+
+```cpp
+#pragma once
+
+#define WIFI_SSID "your-wifi-name"
+#define WIFI_PASSWORD "your-wifi-password"
+```
+
+Keep this file private. Don't commit your Wi-Fi password to GitHub.
+
+### Build and upload
+
+Open a terminal in the `firmware/` directory and use PlatformIO.
+
+Build the firmware:
+
+```bash
+pio run
+```
+
+Upload the LittleFS filesystem:
+
+```bash
+pio run -t uploadfs
+```
+
+Upload the firmware:
+
+```bash
+pio run -t upload
+```
+
+To watch the serial output:
+
+```bash
+pio device monitor
+```
+
+The serial monitor runs at 115200 baud.
+
+The project uses LittleFS to store the downloaded frames, so the filesystem needs to be uploaded and mounted correctly. The firmware deliberately avoids formatting the filesystem if mounting fails, since doing so would erase the cached images.
+
+Once the firmware is uploaded and the ESP32 has a working Wi-Fi connection, it should take care of its daily routine on its own. A reset is only needed for troubleshooting or after uploading new firmware.
+
+## What's on the screen
+
+Everything is in English except for the Spanish word card.
+
+- **Header:** weekday, city and date.
+- **Weather:** current featured temperature, feels-like temperature, wind, rain chance, a four-slot forecast and sunrise/sunset.
+- **Dachshund:** a little scene that changes with the weather. Rain, snow and sunshine show up in the background.
+- **Celebration banner:** appears when there's a birthday or special occasion.
+- **Word card:** Spanish word or phrase, pronunciation, meaning, example and translation.
+- **Anniversary:** on April 3, the anniversary card takes the place of the usual weather card.
+
+The dog's size is controlled by `DOG_SCALE` in `render.py`.
+
+## Your data
+
+The personal data lives in the `data/` directory. You can edit these files directly; there's no database to maintain.
+
+### `data/words.csv`
+
+The columns are:
+
+```text
+word,type,meaning,pronunciation,example,translation
+```
+
+Each row is a word or phrase for the Spanish card. The list is shuffled and worked through before repeating, and the selected word stays the same throughout the day.
+
+Set `type` to `phrase` for a phrase. Only `word`, `type` and `meaning` are required; the renderer skips any optional fields that are empty.
+
+Pronunciation uses a Spain Spanish accent, with the stressed syllable in capital letters and `th` as in "think".
+
+### `data/dates.csv`
+
+The columns are:
+
+```text
+name,month,day,year,rule
+```
+
+This file holds birthdays and special dates.
+
+For a birthday, add a row like:
+
+```csv
+Alex,11,1,1990,
+```
+
+The year is optional. Leave it empty if you don't want the person's age displayed.
+
+Floating dates can be entered using the `rule` column. For example:
+
+- `4th thu` — fourth Thursday of the month
+- `last mon` — last Monday of the month
+- `3rd mon` — third Monday of the month
+- `2nd sun` — second Sunday of the month
+- `easter` — Easter, calculated each year
+
+Special-day names need to match one of the names in `HOLIDAY_NAMES` in `render.py`. Matching is intentional and exact enough to avoid treating someone's birthday as a holiday just because their name happens to contain a holiday word.
 
 ## Celebrations
-The dog jumps, wears a costume and there is confetti whenever there is something to celebrate:
-- **Birthdays**: banner "Happy birthday Alex (36)!"
-- **Monthlyversary** on the 3rd of every month: banner "Happy monthlyversary! Month N"
-- **Anniversary** on April 3: a big "Happy Anniversary! N years together" card takes over the display
-  (weather shrinks to one line, the word of the day stays). The start date is `ANNIVERSARY` in `render.py`.
-- **Special days**: each has its own costume, banner and Spanish word of the day.
 
-| Day | Dog | Word of the day |
+The dachshund gets into the spirit of the day with costumes, little details and confetti.
+
+- **Birthdays:** a birthday banner with the person's name and age, if available.
+- **Monthlyversary:** celebrated on the third of each month.
+- **Anniversary:** April 3, with a large anniversary card. The start date is set by `ANNIVERSARY` in `render.py`.
+- **Special days:** each has its own costume, banner and Spanish word.
+
+The special-day designs are defined in the `HOLIDAYS` table in `render.py`. To stop celebrating a particular date, remove its row from `dates.csv`.
+
+| Day | Dachshund / theme | Spanish word |
 |---|---|---|
-| New Year's Day | party hat, clock at midnight | Año Nuevo |
-| Martin Luther King Jr. Day | calm, with a heart | sueño |
-| Valentine's Day | hearts everywhere | San Valentín |
-| Presidents' Day | Uncle Sam hat + flag | presidente |
-| Easter (calculated) | bunny ears, eggs | Semana Santa |
-| Mother's Day (2nd Sun May) | hearts | madre |
-| Memorial Day (last Mon May) | calm, with a small flag | recuerdo |
-| Father's Day (3rd Sun Jun) | hearts | padre |
-| Juneteenth | party hat | libertad |
-| July 4th (`America`) | Uncle Sam hat + waving flag, stars. Banner shows America's age | fuegos artificiales |
-| Labor Day (1st Mon Sep) | hard hat | trabajo |
-| Columbus Day (2nd Mon Oct) | calm | festivo |
-| Halloween | witch hat, pumpkin, bats | calabaza |
-| Veterans Day | calm, with a small flag | agradecer |
-| Thanksgiving (4th Thu Nov) | pilgrim hat, pumpkin, leaves | Acción de Gracias |
-| Christmas | Santa hat, a present, snowflakes | Feliz Navidad |
-| New Year's Eve | party hat, clock at 11:58, stars | Nochevieja |
+| New Year's Day | Party hat and midnight clock | Año Nuevo |
+| Martin Luther King Jr. Day | Calm pose and a heart | sueño |
+| Valentine's Day | Hearts | San Valentín |
+| Presidents' Day | Uncle Sam hat and flag | presidente |
+| Easter | Bunny ears and eggs | Semana Santa |
+| Mother's Day | Hearts | madre |
+| Memorial Day | Calm pose and small flag | recuerdo |
+| Father's Day | Hearts | padre |
+| Juneteenth | Party hat | libertad |
+| July 4th | Uncle Sam hat, flag and stars | fuegos artificiales |
+| Labor Day | Hard hat | trabajo |
+| Columbus Day | Calm pose | festivo |
+| Halloween | Witch hat, pumpkin and bats | calabaza |
+| Veterans Day | Calm pose and small flag | agradecer |
+| Thanksgiving | Pilgrim hat, pumpkin and leaves | Acción de Gracias |
+| Christmas | Santa hat, present and snowflakes | Feliz Navidad |
+| New Year's Eve | Party hat, late-night clock and stars | Nochevieja |
 
-On cold and snowy days the dog also wears a knitted sweater, plus a beanie when it isn't already wearing a hat.
+On cold and snowy days, the dog also gets a knitted sweater and, when it isn't already wearing a hat, a beanie.
 
-On solemn days (MLK Day, Memorial Day, Veterans Day, Columbus Day) the dog keeps its calm everyday pose.
-Costumes, banners and words are set in the `HOLIDAYS` table in `render.py`.
-To remove a special day, delete its row from `dates.csv`.
+On solemn days such as MLK Day, Memorial Day, Veterans Day and Columbus Day, the dog keeps its everyday pose.
 
-**Privacy:** `dates.csv` has your friends' birthdays, so keep the repo private, and think twice
-before publishing the rendered image anywhere public (use first names only, or serve it
-from your home network).
+## A note about privacy
 
-## Roadmap
-- [x] Spanish words + dates from CSV files in the repo
-- [x] US bank holidays and more, including floating dates (Thanksgiving, Easter...)
-- [ ] More dachshund poses
-- [ ] Export panel-ready data for the ESP32 firmware
-- [ ] Scheduled rendering (GitHub Action or home server)
-- [ ] ESP32 firmware (Arduino/C++): wake, download image, refresh, sleep
+`dates.csv` may contain friends' birthdays and other personal details. Keep the repository private if it contains information you don't want to share.
+
+The rendered images can also reveal names, dates and personal celebrations, so think twice before publishing them somewhere public.
+
+## Project structure
+
+```text
+app-epaper/
+├── .github/
+│   └── workflows/
+│       └── render.yml
+├── data/
+│   ├── dates.csv
+│   └── words.csv
+├── firmware/
+│   └── src/
+│       ├── main.cpp
+│       └── secrets.h       # local only; don't commit
+├── output/                 # generated images and panel data
+├── panel_export.py
+├── render.py
+├── render_periods.py
+├── requirements.txt
+└── README.md
+```
+
+## What's next
+
+- More dachshund poses and little weather scenes.
+- More Spanish words and special-day designs.
+- Keep improving the ESP32's recovery and download handling.
+- Make the daily refresh routine as reliable as possible.
