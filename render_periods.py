@@ -15,6 +15,8 @@ import datetime as dt
 import json
 import urllib.request
 from pathlib import Path
+import time
+import urllib.error
 
 import render
 from panel_export import save_panel_bin
@@ -46,12 +48,31 @@ def fetch_forecast(lat, lon):
         "&temperature_unit=fahrenheit&wind_speed_unit=mph"
         "&timezone=auto&forecast_days=2"
     )
+
     request = urllib.request.Request(
         url,
         headers={"User-Agent": "app-epaper/1.0"}
     )
-    with urllib.request.urlopen(request, timeout=25) as response:
-        return json.load(response)
+
+    for attempt in range(1, 5):
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:
+                return json.load(response)
+
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            print(
+                f"Weather request failed "
+                f"(attempt {attempt}/4): {exc}"
+            )
+
+            if attempt < 4:
+                delay = attempt * 5
+                print(f"Retrying in {delay} seconds...")
+                time.sleep(delay)
+
+    raise RuntimeError(
+        "Could not fetch the Open-Meteo forecast after 4 attempts."
+    )
 
 
 def find_hour(hourly_times, date, hour):

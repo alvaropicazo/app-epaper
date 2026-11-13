@@ -33,6 +33,8 @@ import subprocess
 import urllib.request
 from pathlib import Path
 from panel_export import save_panel_bin
+import time
+import urllib.error
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -325,23 +327,60 @@ def live_weather(lat, lon):
         "apparent_temperature_max,wind_speed_10m_max,sunrise,sunset"
         "&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&forecast_days=1"
     )
-    with urllib.request.urlopen(url, timeout=15) as r:
-        data = json.load(r)
+
+    data = None
+
+    for attempt in range(1, 5):
+        try:
+            with urllib.request.urlopen(url, timeout=60) as r:
+                data = json.load(r)
+            break
+
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            print(f"Weather request failed (attempt {attempt}/4): {exc}")
+
+            if attempt < 4:
+                delay = attempt * 5
+                print(f"Retrying in {delay} seconds...")
+                time.sleep(delay)
+
+    if data is None:
+        raise RuntimeError(
+            "Could not fetch Open-Meteo weather after 4 attempts."
+        )
+
     d, h = data["daily"], data["hourly"]
     code = d["weather_code"][0]
     high, low = round(d["temperature_2m_max"][0]), round(d["temperature_2m_min"][0])
     rain = d["precipitation_probability_max"][0] or 0
     kind = kind_from_code(code, rain)
     label = {"snow": "Snow", "rain": "Rain", "sunny": "Sunny", "cloudy": "Cloudy"}[kind]
+
     if kind not in ("snow", "rain") and high <= 41:
         kind, label = "cold", "Cold"
+
     slots = []
     for name, hour in zip(SLOT_LABELS, SLOT_HOURS):
         pr = h["precipitation_probability"][hour] or 0
-        slots.append((name, kind_from_code(h["weather_code"][hour], pr), round(h["temperature_2m"][hour]), round(pr)))
-    return dict(kind=kind, label=label, high=high, low=low, rain=rain, slots=slots,
-                feels=round(d["apparent_temperature_max"][0]), wind=round(d["wind_speed_10m_max"][0]),
-                sunrise=_clock(d["sunrise"][0]), sunset=_clock(d["sunset"][0]))
+        slots.append((
+            name,
+            kind_from_code(h["weather_code"][hour], pr),
+            round(h["temperature_2m"][hour]),
+            round(pr)
+        ))
+
+    return dict(
+        kind=kind,
+        label=label,
+        high=high,
+        low=low,
+        rain=rain,
+        slots=slots,
+        feels=round(d["apparent_temperature_max"][0]),
+        wind=round(d["wind_speed_10m_max"][0]),
+        sunrise=_clock(d["sunrise"][0]),
+        sunset=_clock(d["sunset"][0])
+    )
 
 
 # ---------------------------------------------------------------- drawing
@@ -1031,11 +1070,7 @@ def main():
     if args.weather:
         weather = mock_weather(args.weather)
     else:
-        try:
-            weather = live_weather(LAT, LON)
-        except Exception as e:  # no internet etc.
-            print(f"Could not fetch live weather ({e}); using mock sunny instead.")
-            weather = mock_weather("sunny")
+        weather = live_weather(LAT, LON)
 
     today = dt.date.fromisoformat(args.date) if args.date else dt.date.today()
     holiday = todays_holiday(today)
