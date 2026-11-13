@@ -25,6 +25,7 @@ permissions:
 
 jobs:
   render:
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     env:
       TZ: America/Chicago
@@ -64,6 +65,16 @@ jobs:
           mkdir -p output
           python render.py --out output/display.png
           python render_periods.py --out-dir output
+
+      - name: Test Open-Meteo connectivity
+        if: steps.time_check.outputs.run == 'true'
+        run: |
+          echo "Checking DNS..."
+          getent hosts api.open-meteo.com
+
+          echo "Checking HTTPS..."
+          curl -v --connect-timeout 15 --max-time 30 \
+            "https://api.open-meteo.com/v1/forecast?latitude=41.8781&longitude=-87.6298&hourly=temperature_2m&timezone=America%2FChicago"
 
       - name: Publish generated frames
         if: steps.time_check.outputs.run == 'true'
