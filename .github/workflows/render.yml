@@ -13,7 +13,6 @@ on:
     branches:
       - main
     paths:
-      - "render.py"
       - "render_periods.py"
       - "panel_export.py"
       - "requirements.txt"
@@ -59,29 +58,23 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Generate the legacy display and four period frames
+      - name: Generate four daily period frames
         if: steps.time_check.outputs.run == 'true'
         run: |
           mkdir -p output
-          python render.py --out output/display.png
           python render_periods.py --out-dir output
-
-      - name: Test Open-Meteo connectivity
-        if: steps.time_check.outputs.run == 'true'
-        run: |
-          echo "Checking DNS..."
-          getent hosts api.open-meteo.com
-
-          echo "Checking HTTPS..."
-          curl -v --connect-timeout 15 --max-time 30 \
-            "https://api.open-meteo.com/v1/forecast?latitude=41.8781&longitude=-87.6298&hourly=temperature_2m&timezone=America%2FChicago"
 
       - name: Publish generated frames
         if: steps.time_check.outputs.run == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add output/display.png output/display.bin \
+
+          # Remove obsolete single-display artifacts from the repository.
+          git rm -f --ignore-unmatch output/display.png output/display.bin
+
+          # Publish only the four frames used by the ESP32.
+          git add \
             output/morning.png output/morning.bin \
             output/afternoon.png output/afternoon.bin \
             output/evening.png output/evening.bin \
