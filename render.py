@@ -1,25 +1,27 @@
+
+
 #!/usr/bin/env python3
 """
-Morning e-paper renderer: weather + a little dachshund + a Spanish word of the day.
+Local development renderer for the 648x480 e-paper display.
 
-Produces a 648x480 image restricted to black & white by default
-(use --color for the panel's 4 colors: black, white, red, yellow), so the preview on your Mac looks like
-what the real display will show.
+This script is intended for local previews and design testing.
+It does not generate the production files used by the ESP32.
 
-Celebrations (the dog jumps, wears a costume and there is confetti):
-  - birthdays from data/dates.csv
-  - monthlyversary on the 3rd of every month (see ANNIVERSARY below)
-  - anniversary on April 3: a big "Happy Anniversary!" card takes over the display
-  - special days from data/dates.csv (US bank holidays and more, see HOLIDAYS below).
-    Each has its own dog costume, banner and Spanish word of the day.
+Weather is simulated by default, so previews work offline.
+Use --live-weather only when you explicitly want to fetch the
+actual forecast for the configured CITY / LAT / LON.
 
-Usage:
-    python render.py                        # live weather for CITY (see top of file), Fahrenheit
-    python render.py --weather rain         # fake weather: sunny | cloudy | rain | cold | snow
-    python render.py --all --open           # weather versions + personal celebrations in one image
-    python render.py --holidays --open      # every special day, on its date this year
-    python render.py --date 2026-11-26      # pretend it is another day (test celebrations)
-    python render.py --color                # use all 4 panel colors instead of black & white
+Examples:
+    python render.py
+    python render.py --weather rain --open
+    python render.py --date 2026-11-26 --weather snow --open
+    python render.py --date 2026-12-25 --open
+    python render.py --all --open
+    python render.py --holidays --open
+    python render.py --color --open
+    python render.py --live-weather --open
+
+Output defaults to out/preview.png.
 """
 import argparse
 import csv
@@ -1042,51 +1044,107 @@ def render_holidays(args):
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--weather", choices=["sunny", "rain", "cold", "snow", "cloudy"],
-                    help="force a fake weather type instead of fetching the real forecast")
-    ap.add_argument("--open", action="store_true", help="open result in Preview (macOS)")
-    ap.add_argument("--all", action="store_true",
-                    help="render every version + a contact sheet (out/all.png)")
-    ap.add_argument("--holidays", action="store_true",
-                    help="render every special day from dates.csv + a contact sheet (out/holidays.png)")
-    ap.add_argument("--color", action="store_true",
-                    help="use all 4 panel colors (default is black & white only)")
-    ap.add_argument("--date", help="pretend today is YYYY-MM-DD (to test celebrations)")
-    ap.add_argument("--out", default="out/preview.png")
+    ap = argparse.ArgumentParser(
+        description="Local e-paper display preview and testing tool"
+    )
+
+    ap.add_argument(
+        "--weather",
+        choices=["sunny", "rain", "cold", "snow", "cloudy"],
+        default="sunny",
+        help="simulated weather (default: sunny)"
+    )
+    ap.add_argument(
+        "--live-weather",
+        action="store_true",
+        help="fetch actual weather instead of simulated weather"
+    )
+    ap.add_argument(
+        "--open",
+        action="store_true",
+        help="open the generated image in macOS Preview"
+    )
+    ap.add_argument(
+        "--all",
+        action="store_true",
+        help="generate all weather and celebration examples"
+    )
+    ap.add_argument(
+        "--holidays",
+        action="store_true",
+        help="generate previews of all special days in dates.csv"
+    )
+    ap.add_argument(
+        "--color",
+        action="store_true",
+        help="use all four panel colors instead of black and white"
+    )
+    ap.add_argument(
+        "--date",
+        help="preview a date in YYYY-MM-DD format"
+    )
+    ap.add_argument(
+        "--out",
+        default="out/preview.png",
+        help="output PNG path (default: out/preview.png)"
+    )
+
     args = ap.parse_args()
 
     global RED, YELLOW, PALETTE
-    if not args.color:  # black & white mode: accents become black, yellow becomes white
+
+    # The panel preview is black and white by default.
+    if not args.color:
         RED, YELLOW, PALETTE = BLACK, WHITE, [BLACK, WHITE]
 
+    # Use the requested date, or today's date.
+    today = dt.date.fromisoformat(args.date) if args.date else dt.date.today()
+
+    # Generate the complete weather/celebration comparison sheet.
     if args.all:
         render_all(args)
         return
+
+    # Generate previews for every special day in data/dates.csv.
     if args.holidays:
         render_holidays(args)
         return
 
-    if args.weather:
-        weather = mock_weather(args.weather)
-    else:
+    # Weather is simulated by default. Live weather is opt-in.
+    if args.live_weather:
         weather = live_weather(LAT, LON)
+    else:
+        weather = mock_weather(args.weather)
 
-    today = dt.date.fromisoformat(args.date) if args.date else dt.date.today()
+    # Resolve everything that depends on the selected date.
     holiday = todays_holiday(today)
     word = word_for(today, holiday)
     birthdays = todays_birthdays(today)
     monthly, years = relationship_celebration(today)
-    img = to_panel_colors(render(weather, word, today, birthdays, monthly, years, holiday))
 
+    # Render and convert to the panel's supported colors.
+    img = to_panel_colors(
+        render(
+            weather,
+            word,
+            today,
+            birthdays,
+            monthly,
+            years,
+            holiday
+        )
+    )
+
+    # Save the preview.
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     img.save(out)
-    print(f"Saved {out} ({img.size[0]}x{img.size[1]}, weather={weather['kind']})")
-    codes = {BLACK: 0, WHITE: 1}
-    if args.color:
-       codes.update({YELLOW: 2, RED: 3})
-    save_panel_bin(img, out.with_suffix(".bin"), codes)
+
+    print(
+        f"Saved {out} "
+        f"({W}x{H}, weather={weather['kind']})"
+    )
+
     if args.open:
         subprocess.run(["open", str(out)])
 
