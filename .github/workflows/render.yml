@@ -3,9 +3,10 @@ name: Generate ePaper Display
 
 on:
   schedule:
-    # 08:17 UTC = 3:17 AM Central Daylight Time
-    # 09:17 UTC = 3:17 AM Central Standard Time
-    - cron: "17 8,9 * * *"
+    # Every day at 12:09 AM Chicago time
+    # Automatically adjusts for daylight saving time.
+    - cron: "9 0 * * *"
+      timezone: "America/Chicago"
 
   workflow_dispatch:
 
@@ -30,42 +31,26 @@ jobs:
       TZ: America/Chicago
 
     steps:
-      - name: Check scheduled run time
-        id: time_check
-        shell: bash
-        run: |
-          if [[ "${{ github.event_name }}" != "schedule" ]] || [[ "$(date +%H)" == "03" ]]; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "run=false" >> "$GITHUB_OUTPUT"
-            echo "Not the 3 AM Chicago run; skipping the duplicate UTC schedule."
-          fi
-
       - name: Check out repository
-        if: steps.time_check.outputs.run == 'true'
         uses: actions/checkout@v4
 
       - name: Set up Python
-        if: steps.time_check.outputs.run == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
 
       - name: Install dependencies
-        if: steps.time_check.outputs.run == 'true'
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
       - name: Generate four daily period frames
-        if: steps.time_check.outputs.run == 'true'
         run: |
           mkdir -p output
           python render_periods.py --out-dir output
 
       - name: Publish generated frames
-        if: steps.time_check.outputs.run == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
