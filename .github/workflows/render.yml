@@ -2,11 +2,6 @@
 name: Generate ePaper Display
 
 on:
-  schedule:
-    # Every day at 12:09 AM Chicago time
-    # Automatically adjusts for daylight saving time.
-    - cron: "9 0 * * *"
-      timezone: "America/Chicago"
 
   workflow_dispatch:
 
