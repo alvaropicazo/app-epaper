@@ -17,6 +17,9 @@ import urllib.request
 from pathlib import Path
 import time
 import urllib.error
+import socket
+import ssl
+import http.client
 
 import render
 from panel_export import save_panel_bin
@@ -37,6 +40,7 @@ LABELS = {
 }
 
 
+
 def fetch_forecast(lat, lon):
     url = (
         "https://api.open-meteo.com/v1/forecast"
@@ -51,27 +55,66 @@ def fetch_forecast(lat, lon):
 
     request = urllib.request.Request(
         url,
-        headers={"User-Agent": "app-epaper/1.0"}
+        headers={
+            "User-Agent": "app-epaper/1.0",
+            "Accept": "application/json",
+            "Connection": "close",
+        }
     )
 
-    for attempt in range(1, 5):
-        try:
-            with urllib.request.urlopen(request, timeout=60) as response:
-                return json.load(response)
+    max_attempts = 5
+    timeout_seconds = 90
 
-        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+    for attempt in range(1, max_attempts + 1):
+        try:
             print(
-                f"Weather request failed "
-                f"(attempt {attempt}/4): {exc}"
+                f"Fetching Open-Meteo forecast "
+                f"(attempt {attempt}/{max_attempts})..."
             )
 
-            if attempt < 4:
-                delay = attempt * 5
-                print(f"Retrying in {delay} seconds...")
+            with urllib.request.urlopen(
+                request,
+                timeout=timeout_seconds
+            ) as response:
+                data = json.load(response)
+
+            # Basic validation before accepting the response.
+            if "hourly" not in data or "daily" not in data:
+                raise ValueError(
+                    "Open-Meteo response is missing hourly or daily data."
+                )
+
+            print("Open-Meteo forecast retrieved successfully.")
+            return data
+
+        except (
+            urllib.error.URLError,
+            TimeoutError,
+            socket.timeout,
+            ssl.SSLError,
+            http.client.HTTPException,
+            OSError,
+        ) as exc:
+
+            print(
+                f"Weather request failed "
+                f"(attempt {attempt}/{max_attempts}): {exc}"
+            )
+
+            if attempt < max_attempts:
+                delay = min(5 * (2 ** (attempt - 1)), 40)
+
+                print(
+                    f"Retrying in {delay} seconds..."
+                )
+
                 time.sleep(delay)
 
     raise RuntimeError(
-        "Could not fetch the Open-Meteo forecast after 4 attempts."
+        f"Could not fetch the Open-Meteo forecast "
+        f"after {max_attempts} attempts. "
+        "The workflow stopped rather than generating "
+        "display images with potentially misleading weather."
     )
 
 
