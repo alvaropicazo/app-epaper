@@ -56,7 +56,7 @@ LAT, LON = 41.8781, -87.6298
 
 # The day you two started. Monthlyversaries fall on this day of every month;
 # the anniversary is on this month + day every year.
-ANNIVERSARY = dt.date(2024, 4, 3)
+ANNIVERSARY = dt.date(2025, 4, 3)
 
 DATA_DIR = Path(__file__).parent / "data"
 
