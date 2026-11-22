@@ -40,7 +40,6 @@ LABELS = {
 }
 
 
-
 def fetch_forecast(lat, lon):
     url = (
         "https://api.open-meteo.com/v1/forecast"
@@ -242,7 +241,8 @@ def main():
                 birthdays,
                 monthly,
                 years,
-                holiday
+                holiday,
+                night=(period == "night")
             )
         )
 

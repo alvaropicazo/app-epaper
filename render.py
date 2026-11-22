@@ -1,5 +1,4 @@
 
-
 #!/usr/bin/env python3
 """
 Local development renderer for the 648x480 e-paper display.
@@ -20,6 +19,7 @@ Examples:
     python render.py --holidays --open
     python render.py --color --open
     python render.py --live-weather --open
+    python render.py --weather sunny --night --open
 
 Output defaults to out/preview.png.
 """
@@ -59,6 +59,7 @@ LAT, LON = 41.8781, -87.6298
 ANNIVERSARY = dt.date(2025, 4, 3)
 
 DATA_DIR = Path(__file__).parent / "data"
+
 
 def load_words():
     with open(DATA_DIR / "words.csv", newline="", encoding="utf-8") as f:
@@ -412,12 +413,29 @@ def wrap(draw, text, fnt, max_width):
 
 def draw_sun(d, cx, cy, r):
     for i in range(8):
-        import math
         a = i * math.pi / 4
         d.line([cx + math.cos(a) * (r + 6), cy + math.sin(a) * (r + 6),
                 cx + math.cos(a) * (r + 20), cy + math.sin(a) * (r + 20)],
                fill=(YELLOW if YELLOW != WHITE else BLACK), width=5)
     d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=YELLOW, outline=BLACK, width=3)
+
+
+def draw_moon(d, x, y, r):
+    # Draw a slim quarter-moon crescent: no dark fill
+    d.arc(
+        (x - r, y - r, x + r, y + r),
+        start=70,
+        end=290,
+        fill=BLACK,
+        width=max(2, r // 7),
+    )
+    d.arc(
+        (x - r // 2, y - r, x + r // 2, y + r),
+        start=90,
+        end=270,
+        fill=BLACK,
+        width=max(2, r // 7),
+    )
 
 
 def draw_cloud(d, cx, cy, fill=WHITE):
@@ -428,24 +446,41 @@ def draw_cloud(d, cx, cy, fill=WHITE):
     d.line([cx - 44, cy + 26, cx + 46, cy + 26], fill=BLACK, width=3)
 
 
-def draw_weather_icon(d, kind, cx, cy):
+def draw_weather_icon(d, kind, cx, cy, night=False):
+    """Draw a weather symbol; at night, replace every sun with a crescent moon."""
     if kind == "sunny":
-        draw_sun(d, cx, cy, 30)
+        if night:
+            draw_moon(d, cx, cy, 30)
+        else:
+            draw_sun(d, cx, cy, 30)
+
     elif kind == "rain":
+        if night:
+            draw_moon(d, cx - 25, cy - 30, 19)
         draw_cloud(d, cx, cy - 10)
         for x in (-24, 0, 24):
             d.line([cx + x, cy + 36, cx + x - 8, cy + 56], fill=RED, width=4)
+
     elif kind == "snow":
+        if night:
+            draw_moon(d, cx - 25, cy - 30, 19)
         draw_cloud(d, cx, cy - 10)
         for x in (-24, 0, 24):
             d.text((cx + x, cy + 44), "*", font=font(34, True), fill=BLACK, anchor="mm")
-    elif kind == "cold":  # thermometer
+
+    elif kind == "cold":
+        if night:
+            draw_moon(d, cx - 27, cy - 30, 18)
         d.rounded_rectangle([cx - 9, cy - 44, cx + 9, cy + 20], radius=9, fill=WHITE, outline=BLACK, width=4)
         d.ellipse([cx - 20, cy + 6, cx + 20, cy + 46], fill=WHITE, outline=BLACK, width=4)
         d.rectangle([cx - 4, cy - 10, cx + 4, cy + 24], fill=RED)
         d.ellipse([cx - 13, cy + 13, cx + 13, cy + 39], fill=RED)
+
     else:
-        draw_sun(d, cx - 18, cy - 18, 18)
+        if night:
+            draw_moon(d, cx - 18, cy - 22, 22)
+        else:
+            draw_sun(d, cx - 18, cy - 18, 18)
         draw_cloud(d, cx + 6, cy + 8)
 
 
@@ -685,11 +720,10 @@ class ScaledDraw:
         return draw
 
 
-def draw_dachshund(d, ox, oy, kind, celebrate=False, theme=None, scale=1.0):
-    """A long, low dachshund facing left. (ox, oy) = top-left of a ~250x230 area (before scaling).
-    Idle pose: head up, tail curled, one front paw lifted.
-    Celebrating pose: mid-jump with a party hat, tongue out, wagging tail, confetti.
-    scale > 1 draws it bigger, growing from the middle of its feet."""
+def draw_dachshund(d, ox, oy, kind, celebrate=False, theme=None, scale=1.0, sleeping=False):
+    """A long, low dachshund facing left, with weather props and an optional sleeping expression."""
+    if sleeping:
+        celebrate = False
     ground = oy + 206
     if scale != 1.0:
         d = ScaledDraw(d, scale, ox + 109, ground)
@@ -757,16 +791,20 @@ def draw_dachshund(d, ox, oy, kind, celebrate=False, theme=None, scale=1.0):
     d.arc([ox + 62, hoy + 106, ox + 86, hoy + 148], 290, 70, fill=WHITE, width=2)  # shine on the ear
 
     # eye / glasses
-    if kind == "sunny":
+    if sleeping:
+        d.arc([ox + 32, hoy + 102, ox + 54, hoy + 119], 0, 180, fill=BLACK, width=4)
+        d.text((ox + 91, hoy + 59), "Z", font=font(20, True), fill=BLACK, anchor="mm")
+        d.text((ox + 108, hoy + 43), "z", font=font(15, True), fill=BLACK, anchor="mm")
+    elif kind == "sunny":
         d.rectangle([ox + 22, hoy + 101, ox + 50, hoy + 117], fill=BLACK)
         d.line([ox + 50, hoy + 108, ox + 58, hoy + 108], fill=BLACK, width=4)
-    elif celebrate:  # happy ^ eye
+    elif celebrate:
         d.arc([ox + 32, hoy + 102, ox + 52, hoy + 118], 180, 360, fill=BLACK, width=4)
-    elif kind == "cloudy":  # sleepy
+    elif kind == "cloudy":
         d.arc([ox + 32, hoy + 104, ox + 52, hoy + 118], 0, 180, fill=BLACK, width=4)
     else:
         d.ellipse([ox + 36, hoy + 102, ox + 48, hoy + 114], fill=BLACK)
-        d.ellipse([ox + 40, hoy + 105, ox + 44, hoy + 109], fill=WHITE)  # sparkle in the eye
+        d.ellipse([ox + 40, hoy + 105, ox + 44, hoy + 109], fill=WHITE)
 
     # accessories
     hat_on = theme in HEADGEAR or (celebrate and theme not in NO_PARTY_HAT)
@@ -818,9 +856,9 @@ def draw_dachshund(d, ox, oy, kind, celebrate=False, theme=None, scale=1.0):
 
 
 # Layout (648x480):  header | weather card (left) + dog scene (right) | [banner] | word card
-LEFT = (24, 290)             # weather card columns
+LEFT = (24, 290)
 SCENE = (306, 58, W - 24, 326)
-GROUND = 308                 # the dog's ground line inside the scene
+GROUND = 308
 DOG_X = 348
 DOG_SCALE = 1.1
 
@@ -871,7 +909,12 @@ def draw_weather_card(img, d, weather):
     for i, (label, kind, temp_f, rain) in enumerate(weather["slots"]):
         y = 188 + i * 28
         d.text((x0 + 4, y + 13), label, font=font(16, True), fill=BLACK, anchor="lm")
-        img.paste(sprite(lambda dd, k=kind: draw_weather_icon(dd, k, 85, 72), 24), (140, y + 2))
+        is_night_slot = label.strip().lower() == "night"
+        img.paste(
+            sprite(lambda dd, k=kind, n=is_night_slot:
+                   draw_weather_icon(dd, k, 85, 72, night=n), 24),
+            (140, y + 2)
+        )
         d.text((202, y + 13), f"{temp_f}\u00b0", font=font(18, True), fill=BLACK, anchor="lm")
         d.text((250, y + 13), f"{rain}%", font=font(16), fill=BLACK, anchor="lm")
     d.line([(x0, 302), (x1, 302)], fill=BLACK, width=2)
@@ -880,22 +923,256 @@ def draw_weather_card(img, d, weather):
            fill=BLACK, anchor="la")
 
 
-def draw_scene(img, d, weather, celebrate, theme):
-    """The dog in its box, with the weather in the sky and a little grass at its feet."""
+
+def draw_sleeping_dachshund(d, ground, kind):
+    """Small wooden doghouse with a sleeping dachshund tucked inside."""
+
+    wood = YELLOW
+    dark = BLACK
+
+    # -----------------------------------------------
+    # 1. Doghouse: side wall
+    # -----------------------------------------------
+    d.polygon(
+        [
+            (475, ground - 112),
+            (565, ground - 125),
+            (565, ground - 5),
+            (475, ground - 5),
+        ],
+        fill=wood,
+        outline=dark
+    )
+
+    # Side wall boards
+    for y in (ground - 85, ground - 55, ground - 25):
+        d.line(
+            [(480, y), (560, y - 8)],
+            fill=dark,
+            width=2
+        )
+
+    # -----------------------------------------------
+    # 2. Front wall
+    # -----------------------------------------------
+    d.rectangle(
+        [365, ground - 112, 477, ground],
+        fill=wood,
+        outline=dark,
+        width=3
+    )
+
+    # Front wall boards
+    for y in (ground - 88, ground - 62, ground - 36):
+        d.line(
+            [(368, y), (474, y)],
+            fill=dark,
+            width=2
+        )
+
+    # -----------------------------------------------
+    # 3. White entrance, centered on the front wall
+    # -----------------------------------------------
+    # Arched top
+    d.pieslice(
+        [390, ground - 100, 465, ground + 18],
+        start=180,
+        end=360,
+        fill=WHITE
+    )
+
+    # Straight lower part
+    d.rectangle(
+        [390, ground - 41, 465, ground],
+        fill=WHITE
+    )
+
+    # -----------------------------------------------
+    # 4. Dog's body, tucked well inside the entrance
+    # -----------------------------------------------
+    d.ellipse(
+        [420, ground - 58, 458, ground - 12],
+        fill=wood,
+        outline=dark,
+        width=3
+    )
+
+    # -----------------------------------------------
+    # 5. Roof: front gable
+    # -----------------------------------------------
+    d.polygon(
+        [
+            (345, ground - 108),
+            (420, ground - 177),
+            (493, ground - 108),
+            (480, ground - 99),
+            (420, ground - 160),
+            (358, ground - 99),
+        ],
+        fill=wood,
+        outline=dark
+    )
+
+    # Roof extending back to the right
+    d.polygon(
+        [
+            (420, ground - 177),
+            (520, ground - 185),
+            (590, ground - 116),
+            (493, ground - 108),
+        ],
+        fill=wood,
+        outline=dark
+    )
+
+    # Roof edges
+    d.line(
+        [(345, ground - 108), (420, ground - 177),
+         (493, ground - 108)],
+        fill=dark,
+        width=4
+    )
+    d.line(
+        [(420, ground - 177), (520, ground - 185),
+         (590, ground - 116)],
+        fill=dark,
+        width=4
+    )
+
+    # -----------------------------------------------
+    # 6. Entrance frame, in front of the body
+    # -----------------------------------------------
+    d.arc(
+        [390, ground - 100, 465, ground + 18],
+        start=180,
+        end=360,
+        fill=dark,
+        width=3
+    )
+    d.line(
+        [(390, ground - 41), (390, ground)],
+        fill=dark,
+        width=3
+    )
+    d.line(
+        [(465, ground - 41), (465, ground)],
+        fill=dark,
+        width=3
+    )
+
+    # -----------------------------------------------
+    # 7. Head resting outside the entrance
+    # -----------------------------------------------
+    d.ellipse(
+        [357, ground - 86, 430, ground - 28],
+        fill=wood,
+        outline=dark,
+        width=3
+    )
+
+    # Muzzle
+    d.ellipse(
+        [337, ground - 60, 386, ground - 36],
+        fill=wood,
+        outline=dark,
+        width=3
+    )
+
+    # Nose
+    d.ellipse(
+        [333, ground - 56, 348, ground - 44],
+        fill=dark
+    )
+
+    # Black floppy ear
+    d.ellipse(
+        [407, ground - 82, 431, ground - 43],
+        fill=dark,
+        outline=dark,
+        width=2
+    )
+
+    # Closed sleeping eye
+    d.arc(
+        [382, ground - 72, 399, ground - 62],
+        start=0,
+        end=180,
+        fill=dark,
+        width=2
+    )
+
+    # -----------------------------------------------
+    # 8. Paws resting outside the entrance
+    # -----------------------------------------------
+    d.ellipse(
+        [375, ground - 16, 414, ground + 1],
+        fill=wood,
+        outline=dark,
+        width=3
+    )
+    d.ellipse(
+        [411, ground - 16, 450, ground + 1],
+        fill=wood,
+        outline=dark,
+        width=3
+    )
+
+    # Sleeping Zs
+    d.text(
+        (467, ground - 145),
+        "z",
+        font=font(13, True),
+        fill=dark
+    )
+    d.text(
+        (481, ground - 158),
+        "Z",
+        font=font(16, True),
+        fill=dark
+    )
+
+
+def draw_scene(img, d, weather, celebrate, theme, night=False):
+    """Draw the weather scene and dachshund; night scenes use a moon and sleeping dog."""
     bx0, by0, bx1, by1 = SCENE
     kind = weather["kind"]
-    if not celebrate:  # keep the sky calm when the dog is jumping
-        if kind == "rain":
+
+    if kind == "rain":
+        if not celebrate:
             for x in (bx0 + 32, bx0 + 60, bx1 - 36, bx1 - 14):
                 drops(d, x, by0 + 12, GROUND - 10)
-        elif kind == "snow":
+        if night:
+            img.paste(
+                sprite(lambda dd: draw_weather_icon(dd, kind, 85, 72, night=True), 36),
+                (bx1 - 74, by0 + 12)
+            )
+
+    elif kind == "snow":
+        if not celebrate:
             for fx, fy in ((330, 76), (358, 104), (392, 132), (600, 80), (584, 124), (606, 150), (340, 150)):
                 draw_snowflake(d, fx, fy, 8)
-        else:
-            img.paste(sprite(lambda dd: draw_weather_icon(dd, kind, 85, 72), 36), (bx1 - 74, by0 + 12))
-    draw_dachshund(d, DOG_X, GROUND - 206, kind, celebrate=celebrate, theme=theme, scale=DOG_SCALE)
+        if night:
+            img.paste(
+                sprite(lambda dd: draw_weather_icon(dd, kind, 85, 72, night=True), 36),
+                (bx1 - 74, by0 + 12)
+            )
+
+    else:
+        img.paste(
+            sprite(lambda dd: draw_weather_icon(dd, kind, 85, 72, night=night), 36),
+            (bx1 - 74, by0 + 12)
+        )
+
+    if night:
+        draw_sleeping_dachshund(d, GROUND, kind)
+    else:
+        draw_dachshund(
+            d, DOG_X, GROUND - 206, kind,
+            celebrate=celebrate, theme=theme, scale=DOG_SCALE
+        )
+            
     d.line([(bx0 + 2, GROUND + 2), (bx1 - 2, GROUND + 2)], fill=BLACK, width=3)
-    for x in range(bx0 + 16, bx1 - 14, 24):  # little grass tufts
+    for x in range(bx0 + 16, bx1 - 14, 24):
         d.line([(x, GROUND + 15), (x + 4, GROUND + 7), (x + 8, GROUND + 15)], fill=BLACK, width=2)
     d.rounded_rectangle([bx0, by0, bx1, by1], radius=14, outline=BLACK, width=4)
 
@@ -935,7 +1212,7 @@ def draw_word_card(d, word, y0):
     return y  # how far down the text reaches (used by the tests)
 
 
-def render(weather, word, today, birthdays=(), monthly=None, years=None, holiday=None):
+def render(weather, word, today, birthdays=(), monthly=None, years=None, holiday=None, night=False):
     img = Image.new("RGB", (W, H), WHITE)
     d = ImageDraw.Draw(img)
     day_info = HOLIDAYS[holiday[0]] if holiday else None
@@ -954,7 +1231,7 @@ def render(weather, word, today, birthdays=(), monthly=None, years=None, holiday
         draw_anniversary(d, years, weather)
     else:
         draw_weather_card(img, d, weather)
-    draw_scene(img, d, weather, celebrate, theme)
+    draw_scene(img, d, weather, celebrate, theme, night=night)
 
     # celebration banner: only takes space when there is something to celebrate
     msgs = []
@@ -1080,6 +1357,11 @@ def main():
         help="use all four panel colors instead of black and white"
     )
     ap.add_argument(
+        "--night",
+        action="store_true",
+        help="preview the night scene with moon icons and a sleeping dachshund"
+    )
+    ap.add_argument(
         "--date",
         help="preview a date in YYYY-MM-DD format"
     )
@@ -1131,7 +1413,8 @@ def main():
             birthdays,
             monthly,
             years,
-            holiday
+            holiday,
+            night=args.night
         )
     )
 
