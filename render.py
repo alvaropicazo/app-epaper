@@ -471,10 +471,7 @@ def draw_weather_icon(d, kind, cx, cy, night=False):
     elif kind == "cold":
         if night:
             draw_moon(d, cx - 27, cy - 30, 18)
-        d.rounded_rectangle([cx - 9, cy - 44, cx + 9, cy + 20], radius=9, fill=WHITE, outline=BLACK, width=4)
-        d.ellipse([cx - 20, cy + 6, cx + 20, cy + 46], fill=WHITE, outline=BLACK, width=4)
-        d.rectangle([cx - 4, cy - 10, cx + 4, cy + 24], fill=RED)
-        d.ellipse([cx - 13, cy + 13, cx + 13, cy + 39], fill=RED)
+        draw_cloud(d, cx, cy - 10)
 
     else:
         if night:
@@ -888,7 +885,7 @@ def draw_anniversary(d, years, weather):
     d.text((x0 + nw + 12, 212), "together", font=sf2, fill=BLACK, anchor="lm")
     for hx in (cx - 42, cx, cx + 42):
         draw_heart(d, hx - 6, 258, 6, RED)
-    line = f"{weather['label']}   {weather['high']}\u00b0 / {weather['low']}\u00b0   \u2022   {weather['rain']}% rain"
+    line = f"{weather['label']}   {weather['high']}\u00b0   \u2022   {weather['rain']}% rain"
     d.text((24, 310), line, font=fit_font(d, line, 266, 20), fill=BLACK, anchor="lm")
 
 
@@ -898,8 +895,6 @@ def draw_weather_card(img, d, weather):
     tf = font(78, True)
     temp = f"{weather['high']}\u00b0"
     d.text((x0 + 4, 54), temp, font=tf, fill=BLACK, anchor="la")
-    d.text((x0 + 4 + d.textlength(temp, font=tf) + 12, 104), f"/ {weather['low']}\u00b0",
-           font=font(30), fill=BLACK, anchor="la")
     lf = font(26, True)
     d.text((x0 + 4, 144), weather["label"], font=lf, fill=BLACK, anchor="la")
     detail = f"Feels {weather['feels']}\u00b0  \u00b7  Wind {weather['wind']} mph"
@@ -1138,9 +1133,8 @@ def draw_scene(img, d, weather, celebrate, theme, night=False):
     kind = weather["kind"]
 
     if kind == "rain":
-        if not celebrate:
-            for x in (bx0 + 32, bx0 + 60, bx1 - 36, bx1 - 14):
-                drops(d, x, by0 + 12, GROUND - 10)
+        for x in (bx0 + 32, bx0 + 60, bx1 - 36, bx1 - 14):
+            drops(d, x, by0 + 12, GROUND - 10)
         if night:
             img.paste(
                 sprite(lambda dd: draw_weather_icon(dd, kind, 85, 72, night=True), 36),
